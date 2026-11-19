@@ -12,6 +12,8 @@ final class ArchivePreviewWindowController: NSObject, NSWindowDelegate {
     private let coordinator: WorkCoordinator
     /// Quit the app when this window's work ends (one-shot launches).
     private let autoQuit: Bool
+    /// Called from windowWillClose so the owner can drop its strong reference.
+    var onClose: (() -> Void)?
     private var window: NSWindow?
     private var tableView: NSTableView?
     private var encodingPopup: NSPopUpButton?
@@ -197,6 +199,10 @@ final class ArchivePreviewWindowController: NSObject, NSWindowDelegate {
             NSApp.terminate(nil)
         }
         return true
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
     }
 }
 

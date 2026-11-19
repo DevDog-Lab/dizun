@@ -5,6 +5,9 @@ import Foundation
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let coordinator = WorkCoordinator()
     private var droplet: DropletWindowController?
+    /// Open preview windows. Strongly held: the window does not retain its
+    /// controller, so buttons and the table die with deallocation.
+    private var previews: [ArchivePreviewWindowController] = []
     /// Files handed over before applicationDidFinishLaunching.
     private var pending: [URL] = []
     /// Set when the launch sequence finished; files after this are live drops.
@@ -48,6 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 WorkPanel.shared.showError("ZIPアーカイブとして読み込めません:\n\(url.lastPathComponent)")
                 if autoQuit { NSApp.terminate(nil) }
                 return
+            }
+            previews.append(preview)
+            preview.onClose = { [weak self, weak preview] in
+                guard let self, let preview else { return }
+                self.previews.removeAll { $0 === preview }
             }
             preview.show()
         }
