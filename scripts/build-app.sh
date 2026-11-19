@@ -1,6 +1,8 @@
 #!/bin/sh
-# Assemble the development Dizun.app (no Xcode project needed).
-# Output: build/Dizun.app — ad-hoc signed, for local verification only.
+# Assemble the development DIZUN app (no Xcode project needed), and — unless
+# DIZUN_NO_INSTALL=1 — install it as /Applications/DIZUN.app so the user can
+# keep it as the default ZIP handler. Default-handler switching itself stays
+# a manual user action (project guardrail).
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -16,5 +18,35 @@ codesign --force --sign - "$APP" >/dev/null 2>&1 \
   || codesign --force --sign - "$APP"
 
 echo "built: $APP"
+
+LSREG=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+
+if [ "${DIZUN_NO_INSTALL:-}" != "1" ]; then
+  DEST="/Applications/DIZUN.app"
+  # Stop a running copy first so the bundle can be replaced cleanly.
+  if pgrep -x DizunApp >/dev/null 2>&1; then
+    osascript -e 'tell application id "com.devdoglab.dizun" to quit' >/dev/null 2>&1 || true
+    i=0
+    while pgrep -x DizunApp >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
+      sleep 0.5
+      i=$((i + 1))
+    done
+    if pgrep -x DizunApp >/dev/null 2>&1; then
+      echo "DIZUN is still running; install skipped. Close it and rerun." >&2
+      exit 1
+    fi
+  fi
+  rm -rf "$DEST"
+  cp -R "$APP" "$DEST"
+  # Keep Open With clean: register the installed copy, forget the build path.
+  "$LSREG" -u "$APP" >/dev/null 2>&1 || true
+  "$LSREG" -f "$DEST"
+  /System/Library/CoreServices/pbs -update
+  echo "installed: $DEST"
+else
+  "$LSREG" -f "$APP"
+  /System/Library/CoreServices/pbs -update
+fi
+
 echo "first launch registers the Finder services; to refresh them now:"
 echo "  /System/Library/CoreServices/pbs -update"
