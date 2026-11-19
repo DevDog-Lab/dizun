@@ -10,6 +10,8 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     private var window: NSWindow?
     private var edgeField: NSTextField?
     private var targetField: NSTextField?
+    private var settingsPages: [NSView] = []
+    private var contentStack: NSStackView?
 
     init(coordinator: WorkCoordinator) {
         self.coordinator = coordinator
@@ -17,7 +19,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     }
 
     func show() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 430),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
                               styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
         window.title = "DIZUN"
@@ -28,6 +30,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
 
         let title = NSTextField(labelWithString: "DIZUN")
         title.font = .boldSystemFont(ofSize: 22)
+        title.alignment = .left
 
         // ZIP / image / anything-else routing in one calm sentence.
         let drop = DropView()
@@ -50,34 +53,62 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             dropStack.centerYAnchor.constraint(equalTo: drop.centerYAnchor),
         ])
 
-        // Tabs: ZIP settings and image settings never share a row.
-        let tabs = NSTabView()
-        tabs.tabViewType = .topTabsBezelBorder
-        tabs.translatesAutoresizingMaskIntoConstraints = false
-        tabs.addTabViewItem(tabItem(label: "圧縮・解凍", view: zipTab()))
-        tabs.addTabViewItem(tabItem(label: "画像最適化", view: imageTab()))
+        // A full-width standard selector and its content share one panel.
+        let selector = DizunRows.segmented(
+            ["圧縮・解凍", "画像最適化"], target: self,
+            action: #selector(settingsTabChanged(_:)), selected: 0)
+        selector.segmentDistribution = .fill
+        selector.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        settingsPages = [zipTab(), imageTab()]
+        settingsPages[1].isHidden = true
+        let pages = DizunRows.group(settingsPages)
+        pages.detachesHiddenViews = true
+        let panelStack = DizunRows.group([selector, pages], spacing: 16)
+        panelStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = NSStackView(views: [title, drop, tabs])
+        let panel = NSBox()
+        panel.boxType = .custom
+        panel.titlePosition = .noTitle
+        panel.borderWidth = 1
+        panel.borderColor = .separatorColor
+        panel.fillColor = .controlBackgroundColor
+        panel.cornerRadius = 8
+        panel.contentViewMargins = .zero
+        let panelContent = panel.contentView!
+        panelContent.addSubview(panelStack)
+        NSLayoutConstraint.activate([
+            panelStack.leadingAnchor.constraint(equalTo: panelContent.leadingAnchor, constant: 16),
+            panelStack.trailingAnchor.constraint(equalTo: panelContent.trailingAnchor, constant: -16),
+            panelStack.topAnchor.constraint(equalTo: panelContent.topAnchor, constant: 16),
+            panelStack.bottomAnchor.constraint(equalTo: panelContent.bottomAnchor, constant: -16),
+            selector.widthAnchor.constraint(equalTo: panelStack.widthAnchor),
+            pages.widthAnchor.constraint(equalTo: panelStack.widthAnchor),
+        ])
+
+        let stack = NSStackView(views: [title, drop, panel])
         stack.orientation = .vertical
-        stack.spacing = 18
+        stack.spacing = 16
         stack.alignment = .leading
         stack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack = stack
 
         let content = window.contentView!
         content.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
+            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
             drop.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            drop.heightAnchor.constraint(equalToConstant: 140),
-            tabs.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            tabs.heightAnchor.constraint(greaterThanOrEqualToConstant: 170),
+            drop.heightAnchor.constraint(equalToConstant: 120),
+            panel.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
+        self.window = window
+        fitWindowToContent()
+        window.center()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
-        self.window = window
     }
 
     /// Re-assert visibility (used by the delayed launch kick): brings the
@@ -90,11 +121,21 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func tabItem(label: String, view: NSView) -> NSTabViewItem {
-        let item = NSTabViewItem(identifier: label)
-        item.label = label
-        item.view = view
-        return item
+    @objc private func settingsTabChanged(_ sender: NSSegmentedControl) {
+        for (index, page) in settingsPages.enumerated() {
+            page.isHidden = index != sender.selectedSegment
+        }
+        fitWindowToContent()
+    }
+
+    /// Keep all four outer insets equal without stretching a sparse settings
+    /// page. Preserve the top edge when changing tabs.
+    private func fitWindowToContent() {
+        guard let window, let contentStack else { return }
+        let top = window.frame.maxY
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.setContentSize(NSSize(width: 560, height: contentStack.fittingSize.height + 36))
+        window.setFrameOrigin(NSPoint(x: window.frame.minX, y: top - window.frame.height))
     }
 
     /// One setting per row, aligned label column.
@@ -114,7 +155,10 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             target: self, action: #selector(encryptionChanged(_:)),
             selected: cryptoSelection)
         return DizunRows.group([
-            DizunRows.row(label: "圧縮時のファイル名", controls: [encoding]),
+            DizunRows.row(label: "圧縮時のファイル名", controls: [
+                DizunRows.hint("例）報告書.zip ／ 複数なら Archive.zip"),
+            ]),
+            DizunRows.row(label: "ファイル名の文字コード", controls: [encoding]),
             DizunRows.row(label: "暗号化", controls: [crypto],
                           hint: "二重ZIPで構成も隠す"),
         ])
@@ -130,7 +174,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         target.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
         targetField = target
 
-        let backup = NSButton(checkboxWithTitle: "元画像をゴミ箱へ残す",
+        let backup = NSButton(checkboxWithTitle: "ゴミ箱へ残す",
                               target: self, action: #selector(backupChanged(_:)))
         backup.state = Settings.optimizeBackupToTrash ? .on : .off
         backup.font = .systemFont(ofSize: 12)
@@ -140,8 +184,8 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
                           hint: "空欄でリサイズなし"),
             DizunRows.row(label: "目標サイズ", controls: [target, DizunRows.label("KB以下")],
                           hint: "空欄で指定なし"),
-            backup,
-        ], spacing: 16)
+            DizunRows.row(label: "元画像", controls: [backup]),
+        ], spacing: 12)
     }
 
     // MARK: - Actions

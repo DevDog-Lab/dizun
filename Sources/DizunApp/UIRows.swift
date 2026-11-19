@@ -2,17 +2,16 @@ import AppKit
 import Foundation
 
 /// Shared row builders so every DIZUN window has one visual rhythm: a fixed
-/// label column, 8pt gaps, leading alignment, secondary-color hints.
+/// label column, compact control groups, and hints directly beneath controls.
 enum DizunRows {
     /// Label column width shared by all setting rows (labels align vertically).
-    static let labelWidth: CGFloat = 120
+    static let labelWidth: CGFloat = 144
 
     static func label(_ text: String) -> NSTextField {
         let field = NSTextField(labelWithString: text)
         field.font = .systemFont(ofSize: 12)
         field.textColor = .secondaryLabelColor
         field.lineBreakMode = .byTruncatingTail
-        field.widthAnchor.constraint(lessThanOrEqualToConstant: labelWidth).isActive = true
         return field
     }
 
@@ -29,21 +28,32 @@ enum DizunRows {
         return field
     }
 
-    /// A settings row: label column, then controls, then an optional hint.
+    /// A fixed label column followed by a compact control group. Hints belong
+    /// to that group so they never drift to the trailing edge of the window.
     static func row(label: String, controls: [NSView], hint: String? = nil) -> NSStackView {
-        var views: [NSView] = []
         let text = self.label(label)
-        text.widthAnchor.constraint(equalToConstant: labelWidth).isActive = true
-        views.append(text)
-        views.append(contentsOf: controls)
+        let controlLine = NSStackView(views: controls)
+        controlLine.orientation = .horizontal
+        controlLine.spacing = 8
+        controlLine.alignment = .centerY
+        controlLine.setHuggingPriority(.required, for: .horizontal)
+
+        var detailViews: [NSView] = [controlLine]
         if let hint {
-            views.append(self.hint(hint))
+            detailViews.append(self.hint(hint))
         }
-        let stack = NSStackView(views: views)
+        let details = NSStackView(views: detailViews)
+        details.orientation = .vertical
+        details.alignment = .leading
+        details.spacing = 4
+
+        let stack = NSStackView(views: [text, details])
         stack.orientation = .horizontal
-        stack.spacing = 8
-        stack.alignment = .centerY
-        stack.setHuggingPriority(.defaultHigh, for: .horizontal)
+        stack.spacing = 12
+        stack.alignment = .firstBaseline
+        stack.setHuggingPriority(.required, for: .horizontal)
+        // Both views already belong to the row before constraints are activated.
+        text.widthAnchor.constraint(equalToConstant: labelWidth).isActive = true
         return stack
     }
 

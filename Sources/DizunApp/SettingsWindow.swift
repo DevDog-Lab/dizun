@@ -18,7 +18,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 210),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 240),
                               styleMask: [.titled, .closable],
                               backing: .buffered, defer: false)
         window.title = "設定"
@@ -36,7 +36,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         target.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
         targetField = target
 
-        let backup = NSButton(checkboxWithTitle: "元画像をゴミ箱へ残す",
+        let backup = NSButton(checkboxWithTitle: "ゴミ箱へ残す",
                               target: self, action: #selector(backupChanged(_:)))
         backup.state = Settings.optimizeBackupToTrash ? .on : .off
         backup.font = .systemFont(ofSize: 12)
@@ -49,7 +49,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
                           hint: "空欄でリサイズなし"),
             DizunRows.row(label: "目標サイズ", controls: [target, DizunRows.label("KB以下")],
                           hint: "空欄で指定なし"),
-            backup,
+            DizunRows.row(label: "元画像", controls: [backup]),
         ], spacing: 14)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
@@ -57,9 +57,11 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -20),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
         ])
+        window.setContentSize(NSSize(width: 380, height: stack.fittingSize.height + 40))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
