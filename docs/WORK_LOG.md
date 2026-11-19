@@ -1,5 +1,23 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-19 — 第3回: ゲートC（Finder連携）の実装とスモーク検証
+
+- **DizunApp**（AppKitシェル、LSUIElement・アクセサリ動作）を実装:
+  - `.zip`オープンで解凍（one-shot: 完了後に自動終了、Finder表示）
+  - Finder右クリックServices: 「DIZUNで圧縮」「DIZUNで解凍」（NSServices / NSFilenamesPboardType）
+  - 進捗パネル（キャンセル付き・スループット表示は今後）、ドロップウィンドウ（プレーン起動時）
+  - ドロップ/オープン判定は共通: ZIPのみ→解凍、それ以外→圧縮（Finder流の命名・ユニーク化）
+  - 圧縮先は1項目なら「名前.zip」、複数なら「Archive.zip」（上書きしない）
+- **scripts/build-app.sh**: SwiftPMリリースビルドから `build/Dizun.app` を生成（Info.plist・PkgInfo・adhoc署名）。Xcodeプロジェクト不要。
+- **Info.plist**: `CFBundleDocumentTypes` で ZIP を `LSHandlerRank=Alternate` で登録（**既定アプリの主張なし**。切り替えはユーザー操作のみ）。`LSUIElement=true`。
+- **スモーク検証（自動）**:
+  1. `DizunApp test.zip` → 既存`src`を上書きせず `src 2/` に展開、日本語ファイル内容完全一致、exit 0で自動終了
+  2. `DizunApp ファイル.txt` → 元ファイルの横に `ファイル.zip` 生成（UTF-8フラグ付き）
+  3. `lsregister -f build/Dizun.app` + `pbs -update` で登録（UIを出さず完了）。`claimed UTIs: public.zip-archive, com.pkware.zip-archive / rank: Alternate` を確認
+- エンジン側は無変更。`swift test` 15/15・ビルド警告0を再確認。
+- **ユーザー実機確認待ち（ゲートCの残り）**: Finder右クリック→サービスに「DIZUNで圧縮/解凍」が表示されるか、.zipの「このアプリケーションで開く」にDIZUNが出るか。既定変更（すべてを変更）はユーザーの意思でのみ。
+- コミット: （本コミット）
+
 ## 2026-11-19 — 第2回: Xcodeライセンス解除後の公式テスト実行と解凍側ジャンクスキップ
 
 - ユーザーが `sudo xcodebuild -license accept` を実行。Xcode 27.2ツールチェーン（Swift 6.4.2）が有効化。

@@ -12,6 +12,9 @@ let package = Package(
         .target(name: "DizunFixtures", dependencies: ["DizunCore"]),
         // Manual verification CLI: pack / unpack / list / selftest.
         .executableTarget(name: "dizun", dependencies: ["DizunCore", "DizunFixtures"]),
+        // Finder-facing app shell: archive-open extraction, Services, droplet.
+        // Packaged into Dizun.app by scripts/build-app.sh.
+        .executableTarget(name: "DizunApp", dependencies: ["DizunCore"]),
         .testTarget(name: "DizunCoreTests", dependencies: ["DizunCore", "DizunFixtures"]),
     ]
 )

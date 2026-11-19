@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ja</string>
+	<key>CFBundleExecutable</key>
+	<string>DizunApp</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.devdoglab.dizun</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Dizun</string>
+	<key>CFBundleDisplayName</key>
+	<string>DIZUN</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- ZIP handling: visible in 開く/Open With. Rank Alternate — DIZUN never
+	     claims the default association; switching stays a user action. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>ZIP archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.zip-archive</string>
+				<string>com.pkware.zip-archive</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Finder right-click Services. Registration happens on first launch;
+	     scripts/build-app.sh prints the pbs refresh command. -->
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>DIZUNで圧縮</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>compressService</string>
+			<key>NSPortName</key>
+			<string>Dizun</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>DIZUNで解凍</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>extractService</string>
+			<key>NSPortName</key>
+			<string>Dizun</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

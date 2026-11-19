@@ -37,6 +37,9 @@ xcuserdata/
 # Upstream research clones (audited separately, never committed)
 research/
 
+# Local app bundle output (scripts/build-app.sh)
+build/
+
 # Local operational output
 logs/
 *.log
