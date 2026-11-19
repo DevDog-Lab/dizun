@@ -46,8 +46,9 @@
 			</array>
 		</dict>
 	</array>
-	<!-- Finder right-click Services. Registration happens on first launch;
-	     scripts/build-app.sh prints the pbs refresh command. -->
+	<!-- Finder right-click Services. NSSendFileTypes (UTI-based) is required
+	     for Finder to consider the service applicable to a file selection;
+	     legacy NSSendTypes alone registers but never shows in the menu. -->
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -60,9 +61,12 @@
 			<string>compressService</string>
 			<key>NSPortName</key>
 			<string>Dizun</string>
-			<key>NSSendTypes</key>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
 			<array>
-				<string>NSFilenamesPboardType</string>
+				<string>public.item</string>
+				<string>public.folder</string>
 			</array>
 		</dict>
 		<dict>
@@ -75,9 +79,11 @@
 			<string>extractService</string>
 			<key>NSPortName</key>
 			<string>Dizun</string>
-			<key>NSSendTypes</key>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
 			<array>
-				<string>NSFilenamesPboardType</string>
+				<string>public.zip-archive</string>
 			</array>
 		</dict>
 	</array>

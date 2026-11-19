@@ -1,5 +1,14 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-19 — 第4回: 右クリックServicesが表示されない問題の修正
+
+- ユーザー実機確認: .zipオープン解凍は動作（ゲートC前半達成）。右クリックサービスに出ない、`open`の相対パス指定ミス（ホームで実行）を報告受けた。
+- 原因: Info.plistのサービス定義に旧式 `NSSendTypes=NSFilenamesPboardType` を使用していた。pbsには登録される（dumpで確認済み）が、現代のFinderは**選択対象へのUTI適合判定**でメニューを出すため、`NSSendFileTypes`（UTI）が無いと右クリックに出ない。監査済みのcrate実装（Resources/Crate-Info.plist）と同じ構成に修正:
+  - DIZUNで圧縮: `NSSendFileTypes = public.item, public.folder` + `NSRequiredContext={}`
+  - DIZUNで解凍: `NSSendFileTypes = public.zip-archive`
+- 再ビルド→`lsregister -f`→`pbs -update`→pbs dumpでUTI版登録を確認→`open`で1度起動しosascriptで終了（LaunchServices経由起動を1回実行）。
+- コミット: （本コミット）。ユーザーによる右クリック表示の再確認待ち。
+
 ## 2026-11-19 — 第3回: ゲートC（Finder連携）の実装とスモーク検証
 
 - **DizunApp**（AppKitシェル、LSUIElement・アクセサリ動作）を実装:
