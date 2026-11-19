@@ -18,52 +18,45 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 200),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 210),
                               styleMask: [.titled, .closable],
                               backing: .buffered, defer: false)
         window.title = "設定"
         window.isReleasedWhenClosed = false
 
-        let heading = NSTextField(labelWithString: "画像最適化の既定値")
-        heading.font = .boldSystemFont(ofSize: 13)
+        let heading = DizunRows.sectionTitle("画像最適化の既定値")
 
-        let edgeLabel = NSTextField(labelWithString: "長辺上限:")
         let edge = Self.digitsField()
+        edge.delegate = self
         edge.stringValue = Settings.optimizeMaxDimension.map(String.init) ?? ""
-        let edgeUnit = NSTextField(labelWithString: "px（空欄 = リサイズなし）")
-        edgeUnit.font = .systemFont(ofSize: 11)
-        edgeUnit.textColor = .secondaryLabelColor
-        let edgeRow = NSStackView(views: [edgeLabel, edge, edgeUnit])
-        edgeRow.orientation = .horizontal
-        edgeRow.spacing = 8
         edgeField = edge
-
-        let targetLabel = NSTextField(labelWithString: "目標サイズ:")
         let target = Self.digitsField()
+        target.delegate = self
         target.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
-        let targetUnit = NSTextField(labelWithString: "KB以下（空欄 = なし）")
-        targetUnit.font = .systemFont(ofSize: 11)
-        targetUnit.textColor = .secondaryLabelColor
-        let targetRow = NSStackView(views: [targetLabel, target, targetUnit])
-        targetRow.orientation = .horizontal
-        targetRow.spacing = 8
         targetField = target
 
         let backup = NSButton(checkboxWithTitle: "元画像をゴミ箱へ残す",
                               target: self, action: #selector(backupChanged(_:)))
         backup.state = Settings.optimizeBackupToTrash ? .on : .off
+        backup.font = .systemFont(ofSize: 12)
 
-        let stack = NSStackView(views: [heading, edgeRow, targetRow, backup])
-        stack.orientation = .vertical
-        stack.spacing = 14
-        stack.alignment = .leading
+        // Same row rhythm as the droplet's 画像 tab — one setting per row,
+        // aligned label column, consistent hints.
+        let stack = DizunRows.group([
+            heading,
+            DizunRows.row(label: "長辺上限", controls: [edge, DizunRows.label("px")],
+                          hint: "空欄でリサイズなし"),
+            DizunRows.row(label: "目標サイズ", controls: [target, DizunRows.label("KB以下")],
+                          hint: "空欄で指定なし"),
+            backup,
+        ], spacing: 14)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let content = window.contentView!
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -20),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
         ])
         window.center()
@@ -92,7 +85,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         }
     }
 
-    static func sanitize(_ raw: String) -> String {
+    nonisolated static func sanitize(_ raw: String) -> String {
         let fullWidth: [Character: Character] = [
             "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
             "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
@@ -101,7 +94,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
             .filter { $0.isASCII && $0.isNumber })
     }
 
-    static func digitsField() -> NSTextField {
+    nonisolated static func digitsField() -> NSTextField {
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 52, height: 24))
         field.placeholderString = "なし"
         field.font = .systemFont(ofSize: 12)

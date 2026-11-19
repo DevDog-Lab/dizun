@@ -3,8 +3,8 @@ import DizunCore
 import Foundation
 
 /// The plain-launch window: explains what DIZUN does and accepts drops.
-/// ZIPs are extracted, everything else is compressed — same heuristic the
-/// open/service paths use.
+/// ZIPs are extracted, images are optimized, everything else is compressed.
+/// Settings live in two tabs so ZIP and image concerns stay separate.
 final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     private let coordinator: WorkCoordinator
     private var window: NSWindow?
@@ -17,7 +17,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     }
 
     func show() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 430),
                               styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
         window.title = "DIZUN"
@@ -26,101 +26,40 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         window.center()
 
         let title = NSTextField(labelWithString: "DIZUN")
-        title.font = .boldSystemFont(ofSize: 26)
-        let subtitle = NSTextField(wrappingLabelWithString:
-            "ZIPはここにドロップして解凍、ほかのファイル/フォルダは圧縮します。Finderの右クリックメニュー（サービス）からも使えます。")
-        subtitle.font = .systemFont(ofSize: 12)
-        subtitle.textColor = .secondaryLabelColor
+        title.font = .boldSystemFont(ofSize: 22)
 
+        // ZIP / image / anything-else routing in one calm sentence.
         let drop = DropView()
         drop.onDrop = { [weak self] urls in
             self?.coordinator.performAutomatic(urls: urls) {}
         }
+        let dropCaption = NSTextField(labelWithString: "ここにドロップ")
+        dropCaption.font = .systemFont(ofSize: 13)
+        let dropHint = NSTextField(labelWithString: "ZIPは解凍・画像は最適化・ほかは圧縮")
+        dropHint.font = .systemFont(ofSize: 11)
+        dropHint.textColor = .tertiaryLabelColor
+        let dropStack = NSStackView(views: [dropCaption, dropHint])
+        dropStack.orientation = .vertical
+        dropStack.alignment = .centerX
+        dropStack.spacing = 4
+        drop.addSubview(dropStack)
+        dropStack.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            dropStack.centerXAnchor.constraint(equalTo: drop.centerXAnchor),
+            dropStack.centerYAnchor.constraint(equalTo: drop.centerYAnchor),
+        ])
 
-        // Compression encoding, persisted (CP932 for legacy Japanese Windows
-        // tools; unmappable names stop the write with an error, never mangle).
-        let encodingLabel = NSTextField(labelWithString: "圧縮時のファイル名:")
-        encodingLabel.font = .systemFont(ofSize: 12)
-        let encoding = NSSegmentedControl(
-            labels: ["UTF-8（標準）", "CP932（Windows互換）"],
-            trackingMode: .selectOne, target: self, action: #selector(encodingChanged(_:)))
-        encoding.segmentStyle = .texturedRounded
-        encoding.selectedSegment = Settings.compressEncoding == .cp932 ? 1 : 0
-
-        // Encryption scheme, persisted; the password itself is asked per job.
-        let cryptoLabel = NSTextField(labelWithString: "暗号化:")
-        cryptoLabel.font = .systemFont(ofSize: 12)
-        let crypto = NSSegmentedControl(
-            labels: ["なし", "AES-256", "ZipCrypto（弱い）"],
-            trackingMode: .selectOne, target: self, action: #selector(encryptionChanged(_:)))
-        crypto.segmentStyle = .texturedRounded
-        switch Settings.compressEncryptionKind {
-        case .none: crypto.selectedSegment = 0
-        case .aes256: crypto.selectedSegment = 1
-        case .zipCrypto: crypto.selectedSegment = 2
-        }
-        let encodingRow = NSStackView(views: [encodingLabel, encoding,
-                                              NSStackView.spacerView, cryptoLabel, crypto])
-        encodingRow.orientation = .horizontal
-        encodingRow.spacing = 8
-
-        // ZIP-side settings collected; the image row below joins the tab view.
-        let zipTab = NSStackView(views: [encodingRow])
-        zipTab.orientation = .vertical
-        zipTab.spacing = 8
-        zipTab.alignment = .leading
-
-        // Image optimization: custom long-edge cap (px), JPEG target size
-        // (KB), and Trash backup for originals. Fields are digits-only.
-        let resizeLabel = NSTextField(labelWithString: "画像最適化:")
-        resizeLabel.font = .systemFont(ofSize: 12)
-        // Built by concatenation: the release optimizer has been observed
-        // dropping these exact two-literal labels from the binary.
-        let edgeLabel = NSTextField(labelWithString: "長" + "辺")
-        edgeLabel.font = .systemFont(ofSize: 12)
-        let edge = numberField(placeholder: "なし")
-        edge.stringValue = Settings.optimizeMaxDimension.map(String.init) ?? ""
-        edgeField = edge
-        let edgeUnit = NSTextField(labelWithString: "px")
-        edgeUnit.font = .systemFont(ofSize: 12)
-        let targetLabel = NSTextField(labelWithString: "目標")
-        targetLabel.font = .systemFont(ofSize: 12)
-        let target = numberField(placeholder: "なし")
-        target.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
-        targetField = target
-        let targetUnit = NSTextField(labelWithString: String("KB以" + "下"))
-        targetUnit.font = .systemFont(ofSize: 12)
-        let optimizeRow = NSStackView(views: [resizeLabel, edgeLabel, edge, edgeUnit,
-                                              targetLabel, target, targetUnit])
-        optimizeRow.orientation = .horizontal
-        optimizeRow.spacing = 6
-
-        let backupToggle = NSButton(checkboxWithTitle: "元画像をゴミ箱へ（最適化の前に元ファイルを退避）",
-                                    target: self, action: #selector(backupChanged(_:)))
-        backupToggle.state = Settings.optimizeBackupToTrash ? .on : .off
-        let imageTab = NSStackView(views: [optimizeRow, backupToggle])
-        imageTab.orientation = .vertical
-        imageTab.spacing = 8
-        imageTab.alignment = .leading
-
-        // Tabs keep ZIP settings and image settings from tangling together.
+        // Tabs: ZIP settings and image settings never share a row.
         let tabs = NSTabView()
         tabs.tabViewType = .topTabsBezelBorder
         tabs.translatesAutoresizingMaskIntoConstraints = false
-        let zipItem = NSTabViewItem(identifier: "zip")
-        zipItem.label = "圧縮・解凍"
-        zipItem.view = zipTab
-        let imageItem = NSTabViewItem(identifier: "image")
-        imageItem.label = "画像最適化"
-        imageItem.view = imageTab
-        tabs.addTabViewItem(zipItem)
-        tabs.addTabViewItem(imageItem)
-        let tabHeight = max(zipTab.fittingSize.height, imageTab.fittingSize.height) + 36
+        tabs.addTabViewItem(tabItem(label: "圧縮・解凍", view: zipTab()))
+        tabs.addTabViewItem(tabItem(label: "画像最適化", view: imageTab()))
 
-        let stack = NSStackView(views: [title, subtitle, drop, tabs])
+        let stack = NSStackView(views: [title, drop, tabs])
         stack.orientation = .vertical
-        stack.spacing = 12
-        stack.alignment = .centerX
+        stack.spacing = 18
+        stack.alignment = .leading
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let content = window.contentView!
@@ -128,74 +67,78 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
-            drop.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
-            drop.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
-            tabs.widthAnchor.constraint(equalTo: drop.widthAnchor),
-            tabs.heightAnchor.constraint(equalToConstant: tabHeight),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
+            drop.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            drop.heightAnchor.constraint(equalToConstant: 140),
+            tabs.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
-        // Size the window to what the rows actually need (a fixed height
-        // used to clip the bottom row out of view).
-        let fitting = stack.fittingSize
-        window.setContentSize(NSSize(width: max(520, fitting.width + 48),
-                                     height: fitting.height + 40))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
     }
 
+    private func tabItem(label: String, view: NSView) -> NSTabViewItem {
+        let item = NSTabViewItem(identifier: label)
+        item.label = label
+        item.view = view
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return item
+    }
+
+    /// One setting per row, aligned label column.
+    private func zipTab() -> NSView {
+        let encoding = DizunRows.segmented(
+            ["UTF-8（標準）", "CP932（Windows互換）"],
+            target: self, action: #selector(encodingChanged(_:)),
+            selected: Settings.compressEncoding == .cp932 ? 1 : 0)
+        let cryptoSelection: Int
+        switch Settings.compressEncryptionKind {
+        case .none: cryptoSelection = 0
+        case .aes256: cryptoSelection = 1
+        case .zipCrypto: cryptoSelection = 2
+        }
+        let crypto = DizunRows.segmented(
+            ["なし", "AES-256", "ZipCrypto"],
+            target: self, action: #selector(encryptionChanged(_:)),
+            selected: cryptoSelection)
+        let cryptoHint = DizunRows.hint("暗号化すると二重ZIPでファイル構成も隠されます")
+        cryptoHint.leadingAnchor.constraint(
+            equalTo: crypto.leadingAnchor).isActive = true
+        return DizunRows.group([
+            DizunRows.row(label: "圧縮時のファイル名", controls: [encoding]),
+            DizunRows.row(label: "暗号化", controls: [crypto]),
+            cryptoHint,
+        ], spacing: 10)
+    }
+
+    private func imageTab() -> NSView {
+        let edge = SettingsWindowController.digitsField()
+        edge.delegate = self
+        edge.stringValue = Settings.optimizeMaxDimension.map(String.init) ?? ""
+        edgeField = edge
+        let target = SettingsWindowController.digitsField()
+        target.delegate = self
+        target.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
+        targetField = target
+
+        let backup = NSButton(checkboxWithTitle: "元画像をゴミ箱へ残す",
+                              target: self, action: #selector(backupChanged(_:)))
+        backup.state = Settings.optimizeBackupToTrash ? .on : .off
+        backup.font = .systemFont(ofSize: 12)
+
+        return DizunRows.group([
+            DizunRows.row(label: "長辺上限", controls: [edge, DizunRows.label("px")],
+                          hint: "空欄でリサイズなし"),
+            DizunRows.row(label: "目標サイズ", controls: [target, DizunRows.label("KB以下")],
+                          hint: "空欄で指定なし"),
+            backup,
+        ], spacing: 16)
+    }
+
+    // MARK: - Actions
+
     @objc private func encodingChanged(_ sender: NSSegmentedControl) {
         Settings.compressEncoding = sender.selectedSegment == 1 ? .cp932 : .utf8
-    }
-
-    @objc private func edgeChanged(_ sender: NSTextField) {
-        Settings.optimizeMaxDimension = Int(sender.stringValue)
-    }
-
-    @objc private func targetChanged(_ sender: NSTextField) {
-        Settings.optimizeTargetKB = Int(sender.stringValue)
-    }
-
-    /// Digits-only fields: full-width digits (IME) are converted to
-    /// half-width and everything else is dropped as it is typed, so the
-    /// active field effectively behaves as half-width numeric input.
-    func controlTextDidChange(_ notification: Notification) {
-        guard let field = notification.object as? NSTextField,
-              field == edgeField || field == targetField else { return }
-        let fullWidth: [Character: Character] = [
-            "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
-            "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
-        ]
-        let converted = String(field.stringValue.map { fullWidth[$0] ?? $0 })
-        let digits = String(converted.prefix(5).filter { $0.isASCII && $0.isNumber })
-        if digits != field.stringValue {
-            field.stringValue = digits
-        }
-        if field == edgeField {
-            Settings.optimizeMaxDimension = Int(digits)
-        } else {
-            Settings.optimizeTargetKB = Int(digits)
-        }
-    }
-
-    private func numberField(placeholder: String) -> NSTextField {
-        // Five digits wide. The width must be an explicit layout
-        // constraint: an editable NSTextField's intrinsic size is a default
-        // field width (~100pt), which Auto Layout uses in stack views —
-        // the frame value alone is ignored.
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 52, height: 24))
-        field.widthAnchor.constraint(equalToConstant: 52).isActive = true
-        field.setContentHuggingPriority(.required, for: .horizontal)
-        field.placeholderString = placeholder
-        field.font = .systemFont(ofSize: 12)
-        field.bezelStyle = .roundedBezel
-        field.delegate = self
-        field.usesSingleLineMode = true
-        return field
-    }
-
-    @objc private func backupChanged(_ sender: NSButton) {
-        Settings.optimizeBackupToTrash = sender.state == .on
     }
 
     @objc private func encryptionChanged(_ sender: NSSegmentedControl) {
@@ -205,14 +148,23 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         default: Settings.compressEncryptionKind = .none
         }
     }
-}
 
-extension NSStackView {
-    /// A flexible spacer for stack rows (AppKit has no built-in one).
-    static var spacerView: NSView {
-        let view = NSView()
-        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        return view
+    @objc private func backupChanged(_ sender: NSButton) {
+        Settings.optimizeBackupToTrash = sender.state == .on
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField,
+              field == edgeField || field == targetField else { return }
+        let digits = SettingsWindowController.sanitize(field.stringValue)
+        if digits != field.stringValue {
+            field.stringValue = digits
+        }
+        if field == edgeField {
+            Settings.optimizeMaxDimension = Int(digits)
+        } else {
+            Settings.optimizeTargetKB = Int(digits)
+        }
     }
 }
 
@@ -229,6 +181,7 @@ final class DropView: NSView {
         layer?.borderColor = NSColor.separatorColor.cgColor
         layer?.borderWidth = 1
         layer?.cornerRadius = 10
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
