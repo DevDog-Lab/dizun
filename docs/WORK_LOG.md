@@ -1,5 +1,15 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-19 — 第2回: Xcodeライセンス解除後の公式テスト実行と解凍側ジャンクスキップ
+
+- ユーザーが `sudo xcodebuild -license accept` を実行。Xcode 27.2ツールチェーン（Swift 6.4.2）が有効化。
+- **`swift test`（XCTest公式ランナー）で第1回の14シナリオが全件合格**することを確認（selftest CLIとの同等性を実証）。
+- **gitleaks 8.30.1導入**（Homebrew）。全履歴スキャン: 4コミット・漏洩なし。pushゲートの要件が揃った（push自体は未実施）。
+- **解凍側ジャンクスキップ実装**: `JunkFilter`（pack/unpack共通）、`Unpacker.Options.skipMacJunk`（既定ON・結果に `skippedJunk` として報告、オプトアウト可）。SPEC §4の双方向対応を完了。
+- シナリオ `unpackJunkSkipped` 追加。**XCTest・selftestとも15/15合格**。
+- 実データ検証: `ditto -c -k` 製アーカイブ（`__MACOSX/` 3エントリ入り）でジャンクのみスキップされ、`圧縮テキスト.txt`・`data.bin` が正しく抽出されることを確認。
+- コミット: （本コミット）
+
 ## 2026-11-19 — 第1回: 監査・アーキテクチャ決定・ZIPコア実装（ゲートA達成、ゲートB機能達成）
 
 担当: Claude Code（Orcaオーケストレーション）。Codex未使用（該当難所なし）。

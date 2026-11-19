@@ -531,6 +531,45 @@ public enum Scenarios {
         try assert(received == payload, "streaming round trip corrupted (sha \(sha256(received)))")
     }
 
+    /// macOS junk entries (`__MACOSX/`, `.DS_Store`, `._*`) are skipped and
+    /// reported by default on extraction, kept when the option is off.
+    public static func unpackJunkSkipped() throws {
+        let work = tempDir("junkskip")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let zipData = ZipCraft.archive([
+            ZipCraft.EntrySpec(name: "real.txt", payload: Data("ok".utf8)),
+            ZipCraft.EntrySpec(name: "__MACOSX/", payload: Data()),
+            ZipCraft.EntrySpec(name: "__MACOSX/._real.txt", payload: Data("df".utf8)),
+            ZipCraft.EntrySpec(name: "sub/.DS_Store", payload: Data("j".utf8)),
+            ZipCraft.EntrySpec(name: "sub/._side", payload: Data("j".utf8)),
+            ZipCraft.EntrySpec(name: "sub/keep.txt", payload: Data("keep".utf8)),
+        ])
+        let zipURL = work.appendingPathComponent("ditto-like.zip")
+        try zipData.write(to: zipURL)
+
+        let outDir = work.appendingPathComponent("out", isDirectory: true)
+        var options = Unpacker.Options()
+        options.destination = outDir
+        options.folderPolicy = .never
+        let result = try Unpacker.unpack(zipURL: zipURL, options: options)
+        try assert(result.skippedJunk.count == 4,
+                   "expected 4 junk skips, got \(result.skippedJunk)")
+        try assert(!exists(outDir.appendingPathComponent("__MACOSX")), "__MACOSX extracted")
+        try assert(!exists(outDir.appendingPathComponent("sub/.DS_Store")), ".DS_Store extracted")
+        try assert(contents("real.txt", in: outDir) == Data("ok".utf8), "real entry missing")
+        try assert(contents("sub/keep.txt", in: outDir) == Data("keep".utf8), "nested entry missing")
+
+        // Opt-out keeps everything.
+        var keepAll = Unpacker.Options()
+        keepAll.destination = work.appendingPathComponent("keep", isDirectory: true)
+        keepAll.folderPolicy = .never
+        keepAll.skipMacJunk = false
+        let kept = try Unpacker.unpack(zipURL: zipURL, options: keepAll)
+        try assert(kept.skippedJunk.isEmpty, "opt-out still skipped junk")
+        try assert(exists(work.appendingPathComponent("keep/__MACOSX/._real.txt")),
+                   "opt-out did not keep __MACOSX")
+    }
+
     public static let all: [(name: String, run: () throws -> Void)] = [
         ("roundTripJapanese", roundTripJapanese),
         ("cp932Write", cp932Write),
@@ -546,5 +585,6 @@ public enum Scenarios {
         ("emptyArchive", emptyArchive),
         ("zip64Read", zip64Read),
         ("streamingLargeFile", streamingLargeFile),
+        ("unpackJunkSkipped", unpackJunkSkipped),
     ]
 }

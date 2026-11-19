@@ -24,14 +24,11 @@ public enum Packer {
     }
 
     /// Names macOS writes for its own bookkeeping; Windows Explorer shows
-    /// them as garbage (SPEC §4).
-    static let junkNames: Set<String> = [
-        ".DS_Store", "__MACOSX", "Icon\r",
-        ".Spotlight-V100", ".Trashes", ".fseventsd", ".TemporaryItems",
-    ]
+    /// them as garbage (SPEC §4). See `JunkFilter`.
+    static let junkNames: Set<String> = JunkFilter.names
 
     static func isJunk(_ name: String) -> Bool {
-        junkNames.contains(name) || name.hasPrefix("._")
+        JunkFilter.isJunk(name)
     }
 
     /// Create a ZIP from files and/or folders. Each source contributes one

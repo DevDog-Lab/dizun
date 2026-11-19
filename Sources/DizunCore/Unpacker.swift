@@ -20,14 +20,20 @@ public enum Unpacker {
         public var forcedEncoding: NameEncoding?
         public var folderPolicy: FolderPolicy = .onlyMultipleTopLevel
         public var limits: ExtractionLimits = ExtractionLimits()
+        /// Skip macOS bookkeeping entries (`__MACOSX/`, `.DS_Store`, `._*`)
+        /// on extraction — what a Windows user would see as garbage. They are
+        /// reported in `Result.skippedJunk`, never silently dropped.
+        public var skipMacJunk = true
         public init(destination: URL? = nil,
                     forcedEncoding: NameEncoding? = nil,
                     folderPolicy: FolderPolicy = .onlyMultipleTopLevel,
-                    limits: ExtractionLimits = ExtractionLimits()) {
+                    limits: ExtractionLimits = ExtractionLimits(),
+                    skipMacJunk: Bool = true) {
             self.destination = destination
             self.forcedEncoding = forcedEncoding
             self.folderPolicy = folderPolicy
             self.limits = limits
+            self.skipMacJunk = skipMacJunk
         }
     }
 
@@ -43,6 +49,8 @@ public enum Unpacker {
         public var skippedSymlinks: [String]
         /// Colliding entries extracted under a numbered name.
         public var renamedDuplicates: [(original: String, chosen: String)]
+        /// macOS bookkeeping entries skipped by `skipMacJunk`.
+        public var skippedJunk: [String]
         public var detectedEncoding: NameEncoding
         /// Items the quarantine attribute could not be set on — reported,
         /// never swallowed (Gatekeeper visibility).
@@ -93,6 +101,7 @@ public enum Unpacker {
         // collision-free target.
         var skippedUnsafe: [String] = []
         var skippedSymlinks: [String] = []
+        var skippedJunk: [String] = []
         var renamedDuplicates: [(original: String, chosen: String)] = []
         var work: [(entry: ZipEntry, components: [String])] = []
         var claimedPaths = Set<String>()
@@ -106,6 +115,10 @@ public enum Unpacker {
             }
             if entry.isSymlink {
                 skippedSymlinks.append(entry.name)
+                continue
+            }
+            if options.skipMacJunk && JunkFilter.isJunkPath(components) {
+                skippedJunk.append(entry.name)
                 continue
             }
             // Directory entries legitimately repeat; only files collide.
@@ -253,6 +266,7 @@ public enum Unpacker {
                       skippedUnsafe: skippedUnsafe,
                       skippedSymlinks: skippedSymlinks,
                       renamedDuplicates: renamedDuplicates,
+                      skippedJunk: skippedJunk,
                       detectedEncoding: forced ?? reader.detectedEncoding,
                       quarantineFailures: quarantineFailures)
     }

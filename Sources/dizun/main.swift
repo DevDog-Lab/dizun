@@ -117,6 +117,9 @@ case "unpack":
         if !result.skippedSymlinks.isEmpty {
             print("skipped symlinks: \(result.skippedSymlinks.joined(separator: ", "))")
         }
+        if !result.skippedJunk.isEmpty {
+            print("skipped macOS junk: \(result.skippedJunk.count) entries")
+        }
         if !result.renamedDuplicates.isEmpty {
             let pairs = result.renamedDuplicates.map { "\($0.original) → \($0.chosen)" }
             print("renamed duplicates: \(pairs.joined(separator: ", "))")
