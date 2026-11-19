@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = self
+        coordinator.openPreview = { [weak self] url in
+            // One-shot launches (no droplet) quit when the preview's job ends;
+            // with the droplet open the app stays.
+            self?.showPreview(of: url, autoQuit: self?.droplet == nil)
+        }
         launched = true
         if pending.isEmpty {
             droplet = DropletWindowController(coordinator: coordinator)
@@ -20,6 +25,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let urls = pending
             pending = []
             runOneShot(urls, quitWhenDone: true)
+        }
+    }
+
+    /// Pre-extraction preview window (contents + name-encoding switch).
+    /// A reader failure (corrupt archive) is reported and, for one-shot
+    /// launches, terminates. Always called on the main thread (delegate and
+    /// droplet callbacks), which `assumeIsolated` asserts.
+    private func showPreview(of url: URL, autoQuit: Bool) {
+        MainActor.assumeIsolated {
+            guard let preview = ArchivePreviewWindowController(
+                archiveURL: url, coordinator: coordinator, autoQuit: autoQuit) else {
+                WorkPanel.shared.showError("ZIPアーカイブとして読み込めません:\n\(url.lastPathComponent)")
+                if autoQuit { NSApp.terminate(nil) }
+                return
+            }
+            preview.show()
         }
     }
 

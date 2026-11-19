@@ -153,6 +153,7 @@ public final class ZipReader {
         return ZipEntry(nameBytes: raw.nameBytes,
                         name: name,
                         isUTF8Flagged: flagged,
+                        isEncrypted: raw.flags & Zip.flagEncrypted != 0,
                         method: raw.method,
                         isDirectory: isDirectory,
                         isSymlink: isSymlink,

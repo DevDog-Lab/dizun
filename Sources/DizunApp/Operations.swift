@@ -13,17 +13,28 @@ final class WorkCoordinator {
 
     // MARK: - Job dispatch
 
+    /// Set by the app delegate: single-archive opens go to the preview
+    /// window instead of extracting immediately (unless the user chose
+    /// instant extraction in Settings).
+    var openPreview: ((URL) -> Void)?
+
     /// Drop / open heuristic: only .zips → extract, anything else → compress.
+    /// A lone ZIP is routed to the preview first when one is configured.
     func performAutomatic(urls: [URL], completion: @escaping () -> Void) {
         let zips = urls.filter { $0.pathExtension.lowercased() == "zip" }
         if zips.count == urls.count, !zips.isEmpty {
+            if zips.count == 1, !Settings.instantExtract, let openPreview {
+                openPreview(zips[0])
+                return
+            }
             extractAll(archives: zips, completion: completion)
         } else {
             compress(files: urls, completion: completion)
         }
     }
 
-    func extractAll(archives: [URL], completion: (() -> Void)? = nil) {
+    func extractAll(archives: [URL], forcedEncoding: NameEncoding? = nil,
+                    completion: (() -> Void)? = nil) {
         run(panelTitle: "解凍",
             panelLabel: archives.first?.lastPathComponent ?? "") { job in
             var revealed = false
@@ -33,7 +44,10 @@ final class WorkCoordinator {
                 let prefix = archives.count > 1 ? "（\(index + 1)/\(archives.count)）" : ""
                 job.update("\(archive.lastPathComponent)\(prefix)")
                 do {
+                    var options = Unpacker.Options()
+                    options.forcedEncoding = forcedEncoding
                     let result = try Unpacker.unpack(zipURL: archive,
+                                                     options: options,
                                                      progress: { job.update($0) },
                                                      shouldCancel: { job.isCancelled })
                     job.notice(Self.notice(for: result))
@@ -57,7 +71,10 @@ final class WorkCoordinator {
             panelLabel: files.first?.lastPathComponent ?? "") { job in
             let destination = try Self.archiveDestination(for: files)
             job.update(destination.lastPathComponent)
+            var options = Packer.Options()
+            options.nameEncoding = Settings.compressEncoding
             let result = try Packer.pack(files, to: destination,
+                                         options: options,
                                          progress: { job.update($0) },
                                          shouldCancel: { job.isCancelled })
             job.notice(Self.notice(for: result))

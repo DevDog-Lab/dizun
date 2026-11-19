@@ -35,7 +35,20 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
             self?.coordinator.performAutomatic(urls: urls) {}
         }
 
-        let stack = NSStackView(views: [title, subtitle, drop])
+        // Compression encoding, persisted (CP932 for legacy Japanese Windows
+        // tools; unmappable names stop the write with an error, never mangle).
+        let encodingLabel = NSTextField(labelWithString: "圧縮時のファイル名:")
+        encodingLabel.font = .systemFont(ofSize: 12)
+        let encoding = NSSegmentedControl(
+            labels: ["UTF-8（標準）", "CP932（Windows互換）"],
+            trackingMode: .selectOne, target: self, action: #selector(encodingChanged(_:)))
+        encoding.segmentStyle = .texturedRounded
+        encoding.selectedSegment = Settings.compressEncoding == .cp932 ? 1 : 0
+        let encodingRow = NSStackView(views: [encodingLabel, encoding])
+        encodingRow.orientation = .horizontal
+        encodingRow.spacing = 8
+
+        let stack = NSStackView(views: [title, subtitle, drop, encodingRow])
         stack.orientation = .vertical
         stack.spacing = 12
         stack.alignment = .centerX
@@ -54,6 +67,10 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+    }
+
+    @objc private func encodingChanged(_ sender: NSSegmentedControl) {
+        Settings.compressEncoding = sender.selectedSegment == 1 ? .cp932 : .utf8
     }
 }
 

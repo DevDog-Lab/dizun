@@ -9,6 +9,9 @@ public struct ZipEntry: Sendable, Equatable {
     public let name: String
     /// True when the entry carried the UTF-8 flag (bit 11).
     public let isUTF8Flagged: Bool
+    /// True when the entry declares encryption (flag bit 0) — refused at
+    /// extraction in the MVP but visible in listings/previews.
+    public let isEncrypted: Bool
     public let method: UInt16
     public let isDirectory: Bool
     public let isSymlink: Bool
