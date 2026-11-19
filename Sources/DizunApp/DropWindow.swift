@@ -22,7 +22,13 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
                               styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
-        window.title = "DIZUN"
+        // No title-bar text (the in-window DIZUN carries the brand); paint
+        // the whole window, titlebar included, in the brand blue.
+        window.title = ""
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
+        window.backgroundColor = NSColor(srgbRed: 0x4F / 255, green: 0x91 / 255,
+                                         blue: 0xDD / 255, alpha: 1)
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
@@ -31,6 +37,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         let title = NSTextField(labelWithString: "DIZUN")
         title.font = .boldSystemFont(ofSize: 22)
         title.alignment = .left
+        title.textColor = .white
 
         // ZIP / image / anything-else routing in one calm sentence.
         let drop = DropView()
@@ -39,9 +46,10 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         }
         let dropCaption = NSTextField(labelWithString: "ここにドロップ")
         dropCaption.font = .systemFont(ofSize: 13)
+        dropCaption.textColor = .white
         let dropHint = NSTextField(labelWithString: "ZIPは解凍・画像は最適化・ほかは圧縮")
         dropHint.font = .systemFont(ofSize: 11)
-        dropHint.textColor = .tertiaryLabelColor
+        dropHint.textColor = NSColor.white.withAlphaComponent(0.75)
         let dropStack = NSStackView(views: [dropCaption, dropHint])
         dropStack.orientation = .vertical
         dropStack.alignment = .centerX
@@ -231,10 +239,10 @@ final class DropView: NSView {
         super.init(frame: .zero)
         registerForDraggedTypes([.fileURL])
         wantsLayer = true
-        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.6).cgColor
         layer?.borderWidth = 1
         layer?.cornerRadius = 10
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
