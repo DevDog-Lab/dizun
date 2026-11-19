@@ -21,4 +21,6 @@ final class DizunCoreTests: XCTestCase {
     func testZip64Read() throws { try Scenarios.zip64Read() }
     func testStreamingLargeFile() throws { try Scenarios.streamingLargeFile() }
     func testUnpackJunkSkipped() throws { try Scenarios.unpackJunkSkipped() }
+    func testEncryptedAESRoundTrip() throws { try Scenarios.encryptedAESRoundTrip() }
+    func testEncryptedZipCryptoRoundTrip() throws { try Scenarios.encryptedZipCryptoRoundTrip() }
 }

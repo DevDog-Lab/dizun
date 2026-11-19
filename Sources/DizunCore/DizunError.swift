@@ -10,6 +10,10 @@ public enum DizunError: Error, Equatable, Sendable {
     case unsupportedMethod(UInt16, entry: String)
     /// Entry is encrypted; crypto is deferred past the MVP (SPEC §8).
     case unsupportedEncryption(entry: String)
+    /// An encrypted entry needs a password before anything is written.
+    case passwordRequired
+    /// The supplied password did not decrypt the entry.
+    case wrongPassword(entry: String)
     /// Stored CRC-32 does not match the extracted bytes.
     case crcMismatch(entry: String)
     /// Actual byte count differs from the central directory's declaration.
@@ -35,6 +39,8 @@ extension DizunError: LocalizedError {
         case .corrupt(let why): return "corrupt archive: \(why)"
         case .unsupportedMethod(let m, let e): return "unsupported compression method \(m): \(e)"
         case .unsupportedEncryption(let e): return "encrypted entry not supported yet: \(e)"
+        case .passwordRequired: return "password required"
+        case .wrongPassword(let e): return "wrong password: \(e)"
         case .crcMismatch(let e): return "CRC-32 mismatch: \(e)"
         case .sizeMismatch(let e): return "size does not match the directory: \(e)"
         case .limitExceeded(let why): return "safety limit exceeded: \(why)"

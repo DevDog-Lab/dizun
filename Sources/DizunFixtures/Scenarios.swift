@@ -326,13 +326,14 @@ public enum Scenarios {
             return false
         }
 
-        // Encrypted entry refused in the MVP (flag bit 0 in the last central record).
+        // Encrypted entry without a password: refused up front (crypto is
+        // supported now — the refusal moved from 'unsupported' to the
+        // password prompt path).
         var encrypted = ZipCraft.archive([ZipCraft.EntrySpec(name: "d.txt", payload: Data())])
         let flagsPosition = encrypted.count - 22 - (46 + 5) + 8
         encrypted[encrypted.startIndex + flagsPosition] = 0x01
         try expectUnpackError(encrypted, in: work, file: "enc.zip") { error in
-            if case .unsupportedEncryption = error { return true }
-            return false
+            error == .passwordRequired
         }
 
         // Truncation: not a ZIP / corrupt.
@@ -570,6 +571,118 @@ public enum Scenarios {
                    "opt-out did not keep __MACOSX")
     }
 
+    /// AES-256 (WinZip AE-2): encrypted write, entry metadata, password
+    /// errors, and a byte-exact round trip.
+    public static func encryptedAESRoundTrip() throws {
+        let work = tempDir("aes")
+        defer { try? FileManager.default.removeItem(at: work) }
+        // Compressible so the entry actually takes deflate under AES.
+        let block = pseudoRandom(4 << 10)
+        var payload = Data(capacity: block.count * 30)
+        for _ in 0..<30 { payload.append(block) }
+        let src = work.appendingPathComponent("機密資料", isDirectory: true)
+        try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
+        try makeFile("秘密.txt", data: payload, in: src)
+        try makeFile("空.txt", data: Data(), in: src)
+
+        let zipURL = work.appendingPathComponent("secret.zip")
+        _ = try Packer.pack([src], to: zipURL,
+                            options: .init(encryption: .aes256(password: "test-パスワード123")))
+
+        let reader = try ZipReader(url: zipURL)
+        let secret = reader.entries.first { $0.name.hasSuffix("秘密.txt") }
+        try assert(secret != nil, "encrypted entry not listed")
+        try assert(secret!.isEncrypted, "entry missing the encrypted flag")
+        try assert(secret!.method == Zip.methodAES, "method should be 99, is \(secret!.method)")
+        try assert(secret!.aesStrength == 3, "AES strength should be 3")
+        try assert(secret!.aesActualMethod == Zip.methodDeflate,
+                   "actual method should be deflate")
+        try assert(secret!.crc32 == 0, "AE-2 must store CRC 0")
+        let empty = reader.entries.first { $0.name.hasSuffix("空.txt") }
+        try assert(empty?.isEncrypted == true, "empty entry not encrypted")
+
+        // No password → refused before anything is written.
+        let out1 = work.appendingPathComponent("out1", isDirectory: true)
+        do {
+            _ = try Unpacker.unpack(zipURL: zipURL, options: .init(destination: out1))
+            throw ScenarioFailure(message: "encrypted archive unpacked without a password")
+        } catch let error as DizunError {
+            try assert(error == .passwordRequired, "expected passwordRequired, got \(error)")
+        }
+        try assert((try? FileManager.default.contentsOfDirectory(atPath: out1.path)) == nil,
+                   "password refusal left output behind")
+
+        // Wrong password → rejected by the verifier/HMAC.
+        do {
+            _ = try Unpacker.unpack(zipURL: zipURL, options: .init(
+                destination: work.appendingPathComponent("out2", isDirectory: true),
+                password: "test-まちがい"))
+            throw ScenarioFailure(message: "wrong password accepted")
+        } catch let error as DizunError {
+            guard case .wrongPassword = error else {
+                throw ScenarioFailure(message: "expected wrongPassword, got \(error)")
+            }
+        }
+
+        // Correct password → byte-exact.
+        let out3 = work.appendingPathComponent("out3", isDirectory: true)
+        let result = try Unpacker.unpack(zipURL: zipURL, options: .init(
+            destination: out3, password: "test-パスワード123"))
+        try assert(result.extractedFiles == 2, "expected 2 files, got \(result.extractedFiles)")
+        try assert(contents("機密資料/秘密.txt", in: out3) == payload,
+                   "AES round trip corrupted the payload")
+        try assert(contents("機密資料/空.txt", in: out3) == Data(),
+                   "encrypted empty file corrupted")
+    }
+
+    /// PKWARE traditional (ZipCrypto): legacy framing, check byte, password
+    /// errors, byte-exact round trip.
+    public static func encryptedZipCryptoRoundTrip() throws {
+        let work = tempDir("zcrypto")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let payload = Data("レガシー暗号化のテスト。".utf8)
+        let src = work.appendingPathComponent("資料", isDirectory: true)
+        try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
+        try makeFile("文書.txt", data: payload, in: src)
+
+        let zipURL = work.appendingPathComponent("legacy.zip")
+        _ = try Packer.pack([src], to: zipURL,
+                            options: .init(encryption: .zipCrypto(password: "test-pw-1234")))
+
+        let reader = try ZipReader(url: zipURL)
+        let entry = reader.entries.first { $0.name.hasSuffix("文書.txt") }
+        try assert(entry != nil, "entry not listed")
+        try assert(entry!.isEncrypted, "missing encrypted flag")
+        try assert(entry!.method == Zip.methodDeflate || entry!.method == Zip.methodStore,
+                   "ZipCrypto must keep the plain method")
+        try assert(entry!.encryptionKind == .zipCrypto, "kind should be zipCrypto")
+        try assert(entry!.crc32 != 0, "ZipCrypto keeps the real CRC")
+
+        do {
+            _ = try Unpacker.unpack(zipURL: zipURL, options: .init(
+                destination: work.appendingPathComponent("out1", isDirectory: true)))
+            throw ScenarioFailure(message: "unpacked without password")
+        } catch let error as DizunError {
+            try assert(error == .passwordRequired, "expected passwordRequired, got \(error)")
+        }
+        do {
+            _ = try Unpacker.unpack(zipURL: zipURL, options: .init(
+                destination: work.appendingPathComponent("out2", isDirectory: true),
+                password: "test-bad"))
+            throw ScenarioFailure(message: "wrong password accepted")
+        } catch let error as DizunError {
+            guard case .wrongPassword = error else {
+                throw ScenarioFailure(message: "expected wrongPassword, got \(error)")
+            }
+        }
+
+        let out3 = work.appendingPathComponent("out3", isDirectory: true)
+        _ = try Unpacker.unpack(zipURL: zipURL, options: .init(
+            destination: out3, password: "test-pw-1234"))
+        try assert(contents("資料/文書.txt", in: out3) == payload,
+                   "ZipCrypto round trip corrupted the payload")
+    }
+
     public static let all: [(name: String, run: () throws -> Void)] = [
         ("roundTripJapanese", roundTripJapanese),
         ("cp932Write", cp932Write),
@@ -586,5 +699,7 @@ public enum Scenarios {
         ("zip64Read", zip64Read),
         ("streamingLargeFile", streamingLargeFile),
         ("unpackJunkSkipped", unpackJunkSkipped),
+        ("encryptedAESRoundTrip", encryptedAESRoundTrip),
+        ("encryptedZipCryptoRoundTrip", encryptedZipCryptoRoundTrip),
     ]
 }

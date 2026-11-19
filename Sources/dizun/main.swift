@@ -2,11 +2,37 @@ import DizunCore
 import DizunFixtures
 import Foundation
 
+import Darwin
+
 let version = "dizun-core 0.1.0"
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data((message + "\n").utf8))
     exit(1)
+}
+
+/// Hidden-input prompt (passwords never appear in argv, logs or the screen).
+func promptHidden(_ prompt: String) -> String? {
+    print(prompt, terminator: ": ")
+    fflush(stdout)
+    var term = termios()
+    tcgetattr(STDIN_FILENO, &term)
+    var saved = term
+    term.c_lflag &= ~tcflag_t(ECHO)
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &term)
+    let line = readLine()
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved)
+    print()
+    return line
+}
+
+/// Ask twice and require a match; empty input means "no encryption".
+func promptNewPassword() -> String? {
+    guard let first = promptHidden("パスワード"), !first.isEmpty else { return nil }
+    guard let second = promptHidden("パスワード（確認）"), first == second else {
+        fail("パスワードが一致しません")
+    }
+    return first
 }
 
 func usage() -> Never {
@@ -53,6 +79,8 @@ case "pack":
     var sources: [URL] = []
     var output: URL?
     var options = Packer.Options()
+    var wantsPassword = false
+    var legacyCrypto = false
     var index = 0
     while index < arguments.count {
         let arg = arguments[index]
@@ -63,6 +91,10 @@ case "pack":
             output = URL(fileURLWithPath: arguments[index])
         case "--cp932":
             options.nameEncoding = .cp932
+        case "--password":
+            wantsPassword = true
+        case "--zipcrypto":
+            legacyCrypto = true
         default:
             sources.append(URL(fileURLWithPath: arg))
         }
@@ -70,6 +102,15 @@ case "pack":
     }
     guard !sources.isEmpty else { fail("pack: no sources") }
     guard let output else { fail("pack: -o <output.zip> is required") }
+    if wantsPassword, let password = promptNewPassword() {
+        options.encryption = legacyCrypto
+            ? .zipCrypto(password: password)
+            : .aes256(password: password)
+        if legacyCrypto {
+            FileHandle.standardError.write(Data((
+                "警告: ZipCryptoは脆弱な方式です。可能な限りAES-256を使用してください。\n").utf8))
+        }
+    }
     do {
         let result = try Packer.pack(sources, to: output, options: options) { name in
             print("      \(name)")
@@ -101,6 +142,8 @@ case "unpack":
             case "cp932": options.forcedEncoding = .cp932
             default: fail("unpack: unknown encoding \(arguments[index])")
             }
+        case "--password":
+            options.password = promptHidden("パスワード") ?? ""
         default:
             input = URL(fileURLWithPath: arg)
         }
@@ -108,7 +151,17 @@ case "unpack":
     }
     guard let input else { fail("unpack: no archive given") }
     do {
-        let result = try Unpacker.unpack(zipURL: input, options: options)
+        // An encrypted archive without a password prompts once and retries.
+        var result: Unpacker.Result
+        do {
+            result = try Unpacker.unpack(zipURL: input, options: options)
+        } catch let error as DizunError where error == .passwordRequired {
+            guard let password = promptHidden("パスワード"), !password.isEmpty else {
+                fail("パスワードが必要です")
+            }
+            options.password = password
+            result = try Unpacker.unpack(zipURL: input, options: options)
+        }
         print("extracted \(result.extractedFiles) files, \(result.extractedDirectories) directories " +
               "→ \(result.root.lastPathComponent) (encoding: \(result.detectedEncoding.rawValue))")
         if !result.skippedUnsafe.isEmpty {

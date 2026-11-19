@@ -11,7 +11,8 @@ enum CRC32 {
     /// `finalize` XORs it back out. Verified against Info-ZIP unzip.
     static let initial: UInt32 = 0xFFFF_FFFF
 
-    private static let table: [UInt32] = {
+    /// Table shared with the ZipCrypto cipher's per-byte CRC step.
+    static let table: [UInt32] = {
         (0..<256).map { i -> UInt32 in
             var c = UInt32(i)
             for _ in 0..<8 {

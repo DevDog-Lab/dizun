@@ -23,6 +23,23 @@ public struct ZipEntry: Sendable, Equatable {
     public let dosTime: UInt16
     /// Unix permission/mode bits from external attributes, when present.
     public let unixMode: UInt16?
+    /// WinZip AES info from the 0x9901 extra field (method 99 entries only).
+    public let aesStrength: UInt8?
+    public let aesActualMethod: UInt16?
+}
+
+extension ZipEntry {
+    /// Which protection an entry carries — drives the UI's password prompt.
+    public var encryptionKind: EncryptionKind {
+        if isEncrypted == false { return .none }
+        return method == Zip.methodAES ? .aes : .zipCrypto
+    }
+
+    public enum EncryptionKind: Sendable, Equatable {
+        case none
+        case aes
+        case zipCrypto
+    }
 }
 
 extension ZipEntry {
@@ -43,6 +60,8 @@ public enum Zip {
     public static let flagUTF8: UInt16 = 0x0800
     public static let methodStore: UInt16 = 0
     public static let methodDeflate: UInt16 = 8
+    /// WinZip AES wrapper method; the real method lives in the 0x9901 extra.
+    public static let methodAES: UInt16 = 99
 
     public static func littleEndian16(_ value: UInt16) -> [UInt8] {
         [UInt8(value & 0xFF), UInt8(value >> 8)]
@@ -101,8 +120,10 @@ public struct ExtractionLimits: Sendable {
     public var maxTotalUncompressed: UInt64 = 8 << 30
     /// Maximum declared size of a single entry.
     public var maxEntrySize: UInt64 = 4 << 30
-    /// Maximum compressed→uncompressed ratio per deflated entry.
-    public var maxExpansionRatio: Double = 200
+    /// Maximum compressed→uncompressed ratio per deflated entry. DEFLATE's
+    /// theoretical ceiling is ~1032:1, so 1000 rejects only impossible
+    /// streams; absolute size caps do the real zip-bomb work.
+    public var maxExpansionRatio: Double = 1000
     /// Headroom left free on the destination volume by the pre-flight check.
     public var spaceMargin: UInt64 = 64 << 20
     /// The MVP reader holds the archive in memory; larger files are refused

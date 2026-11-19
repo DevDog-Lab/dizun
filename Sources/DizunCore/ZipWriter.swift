@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// Streaming ZIP writer.
 ///
@@ -15,9 +16,23 @@ public final class ZipWriter {
         case cp932
     }
 
+    /// Entry encryption (SPEC §4). File entries only; names stay readable.
+    public enum Encryption: Sendable, Equatable {
+        case none
+        /// WinZip AE-2, AES-256 — the modern default.
+        case aes256(password: String)
+        /// PKWARE traditional — weak (known-plaintext attacks); legacy
+        /// compatibility only. Callers must warn when producing it.
+        case zipCrypto(password: String)
+    }
+
     public struct Options: Sendable {
         public var nameEncoding: NameEncoding = .utf8
-        public init() {}
+        public var encryption: Encryption = .none
+        public init(nameEncoding: NameEncoding = .utf8, encryption: Encryption = .none) {
+            self.nameEncoding = nameEncoding
+            self.encryption = encryption
+        }
     }
 
     /// Files larger than this switch from Store-if-better to streaming
@@ -39,6 +54,7 @@ public final class ZipWriter {
         var localHeaderOffset: UInt64
         var externalAttributes: UInt32
         var versionNeeded: UInt16
+        var aesActualMethod: UInt16?
     }
 
     private enum Payload {
@@ -167,13 +183,13 @@ public final class ZipWriter {
         let (dosDate, dosTime) = DosDateTime.pack(modificationDate)
         let useZip64 = uncompressedSize > zip64Threshold
         let localOffset = position
-        let flags: UInt16 = encoded.flagUTF8 ? Zip.flagUTF8 : 0
+        let encryption = isDirectory ? Encryption.none : options.encryption
+        var flags: UInt16 = encoded.flagUTF8 ? Zip.flagUTF8 : 0
+        if case .none = encryption {} else { flags |= Zip.flagEncrypted }
 
-        // Compress in-memory payloads first so the header carries real values;
-        // streaming payloads patch CRC/compressed-size back afterwards.
         var crc: UInt32 = 0
         var compressedSize: UInt64 = 0
-        var method: UInt16 = Zip.methodStore
+        var baseMethod: UInt16 = Zip.methodStore
         var body: Data = Data()
         switch payload {
         case .data(let data):
@@ -182,7 +198,7 @@ public final class ZipWriter {
             if !isDirectory, data.count > 0 {
                 let deflated = try DeflateStream.compress(data)
                 if deflated.count < data.count {
-                    method = Zip.methodDeflate
+                    baseMethod = Zip.methodDeflate
                     body = deflated
                     compressedSize = UInt64(deflated.count)
                 } else {
@@ -192,36 +208,96 @@ public final class ZipWriter {
                 body = data
             }
         case .stream:
-            method = Zip.methodDeflate
+            baseMethod = Zip.methodDeflate
         }
 
+        // Encryption framing. Method becomes 99 (AES wrapper) with the real
+        // method in the 0x9901 extra; ZipCrypto keeps the plain method with
+        // a 12-byte header prepended to the data.
+        var aesExtra: Data? = nil
+        var storedMethod = baseMethod
+        var crcField: UInt32 = crc
+        var bodyStorage: Data = body          // in-memory path: what hits the file
+        var zipCryptoCipher: ZipCryptoCipher? = nil
+        var aesCipher: WinZipAES? = nil
+        switch encryption {
+        case .none:
+            break
+        case .aes256(let password):
+            aesExtra = Self.aesExtraField(actualMethod: baseMethod)
+            storedMethod = Zip.methodAES
+            crcField = 0                       // AE-2 authenticates via HMAC
+            let salt = try Self.randomData(16)
+            var cipher = WinZipAES(encryptWith: password, strength: .aes256, salt: salt)
+            var out = Data()
+            out.append(salt)
+            out.append(cipher.derivedVerifier)
+            if case .stream = payload {
+                aesCipher = cipher
+            } else {
+                out.append(cipher.process(body))
+                out.append(cipher.authCode())
+            }
+            bodyStorage = out
+            compressedSize = UInt64(out.count)
+        case .zipCrypto(let password):
+            // The check byte is the high CRC byte (no data descriptors
+            // here). Streaming needs a CRC pre-pass over the source.
+            if case .stream(let url, _) = payload {
+                crc = try Self.crcOfContents(at: url)
+            }
+            crcField = crc
+            let random = try Self.randomData(ZipCryptoCipher.headerSize - 1)
+            var out = Data()
+            var cipher = ZipCryptoCipher(password: password, randomBytes: random,
+                                         checkByte: UInt8(crc >> 24), header: &out)
+            if case .stream = payload {
+                zipCryptoCipher = cipher
+            } else {
+                out.append(cipher.encrypt(body))
+            }
+            bodyStorage = out
+            compressedSize = UInt64(out.count)
+        }
+
+        let versionNeeded: UInt16 = useZip64 ? 45 : (aesExtra != nil ? 51 : 20)
+
         // Local file header: 30 fixed bytes, then the name, then the extra
-        // field (ZIP64 sizes) — in that on-disk order.
+        // fields (AES descriptor, then ZIP64 sizes).
+        let headerCRC: UInt32
+        let headerCompressed: UInt32
+        if case .stream = payload {
+            headerCRC = crcField               // real for ZipCrypto, 0 for AES/plain
+            headerCompressed = 0                // patched after the stream
+        } else {
+            headerCRC = crcField
+            headerCompressed = UInt32(truncatingIfNeeded: compressedSize)
+        }
         var header: [UInt8] = []
         header += Zip.littleEndian32(Zip.localFileHeaderSignature)
-        header += Zip.littleEndian16(useZip64 ? 45 : 20)
+        header += Zip.littleEndian16(versionNeeded)
         header += Zip.littleEndian16(flags)
-        header += Zip.littleEndian16(method)
+        header += Zip.littleEndian16(storedMethod)
         header += Zip.littleEndian16(dosTime)
         header += Zip.littleEndian16(dosDate)
-        if case .stream = payload {
-            header += [0, 0, 0, 0]                  // CRC-32, patched after the stream
-            header += [0, 0, 0, 0]                  // compressed size, patched
-        } else {
-            header += Zip.littleEndian32(crc)
-            header += Zip.littleEndian32(UInt32(truncatingIfNeeded: compressedSize))
-        }
+        header += Zip.littleEndian32(headerCRC)
+        header += Zip.littleEndian32(headerCompressed)
         header += Zip.littleEndian32(useZip64 ? 0xFFFF_FFFF : UInt32(truncatingIfNeeded: uncompressedSize))
         header += Zip.littleEndian16(UInt16(encoded.bytes.count))
-        header += Zip.littleEndian16(useZip64 ? 20 : 0)
+        let extraLength = UInt16((aesExtra?.count ?? 0) + (useZip64 ? 20 : 0))
+        header += Zip.littleEndian16(extraLength)
         try write(Data(header))
         try write(encoded.bytes)
+        if let aesExtra {
+            try write(aesExtra)
+        }
 
         // ZIP64 extra: id + size + uncompressed(8) + compressed(8, patched
         // when streaming).
         var zip64CompressedPatch: UInt64? = nil
         if useZip64 {
-            let slotOffset = localOffset + 30 + UInt64(encoded.bytes.count) + 4 + 8
+            let slotOffset = localOffset + 30 + UInt64(encoded.bytes.count)
+                + UInt64(aesExtra?.count ?? 0) + 4 + 8
             zip64CompressedPatch = slotOffset
             var extra: [UInt8] = [0x01, 0x00]
             extra += Zip.littleEndian16(16)
@@ -232,69 +308,139 @@ public final class ZipWriter {
 
         switch payload {
         case .data:
-            try write(body)
+            try write(bodyStorage)
+            if case .zipCrypto = encryption {
+                // In-memory ZipCrypto appended the encrypted body to the
+                // header already; sizes accounted above.
+            }
         case .stream(let url, let onBytes):
             let streamed = try writeStreamed(url: url,
                                              localOffset: localOffset,
                                              zip64CompressedPatch: zip64CompressedPatch,
+                                             zipCrypto: zipCryptoCipher,
+                                             aes: aesCipher,
+                                             precomputedCRC: crcField,
                                              onBytes: onBytes)
             crc = streamed.crc
             compressedSize = streamed.size
+            if case .none = encryption {
+                crcField = streamed.crc
+            }
         }
 
         records.append(CentralRecord(nameBytes: encoded.bytes,
                                      flags: flags,
-                                     method: method,
+                                     method: storedMethod,
                                      dosTime: dosTime,
                                      dosDate: dosDate,
-                                     crc32: crc,
+                                     crc32: crcField,
                                      compressedSize: compressedSize,
                                      uncompressedSize: uncompressedSize,
                                      localHeaderOffset: localOffset,
                                      externalAttributes: externalAttributes(isDirectory: isDirectory,
                                                                             posixMode: posixMode),
-                                     versionNeeded: useZip64 ? 45 : 20))
+                                     versionNeeded: versionNeeded,
+                                     aesActualMethod: aesExtra != nil ? baseMethod : nil))
     }
 
     /// Deflate a file straight into the archive, then patch CRC-32 and
     /// compressed size back into the local header (no data descriptor).
     private func writeStreamed(url: URL, localOffset: UInt64,
                                zip64CompressedPatch: UInt64?,
+                               zipCrypto: ZipCryptoCipher?,
+                               aes: WinZipAES?,
+                               precomputedCRC: UInt32,
                                onBytes: ((UInt64) -> Void)?) throws -> (crc: UInt32, size: UInt64) {
         let input = try FileHandle(forReadingFrom: url)
         defer { try? input.close() }
         var runningCRC: UInt32 = CRC32.initial
         var total: UInt64 = 0
+        var zipCryptoCipher = zipCrypto
+        var aesCipher = aes
         try DeflateStream.run(encode: true, read: {
             let chunk = try input.read(upToCount: 256 << 10) ?? Data()
             if chunk.isEmpty { return nil }
             // CRC is over the *source* bytes; the write callback below sees
-            // the deflated stream, not the file content.
+            // the deflated (and possibly encrypted) stream, not the content.
             CRC32.update(&runningCRC, chunk)
             return chunk
-        }, write: { chunk in
-            try self.write(chunk)
-            total += UInt64(chunk.count)
+        }, write: { deflated in
+            var out = deflated
+            if var cipher = zipCryptoCipher {
+                out = cipher.encrypt(deflated)
+                zipCryptoCipher = cipher
+            }
+            if var cipher = aesCipher {
+                out = cipher.process(deflated)
+                aesCipher = cipher
+            }
+            try self.write(out)
+            total += UInt64(out.count)
             onBytes?(total)
         })
-        let finalizedCRC = CRC32.finalize(runningCRC)
+        var finalTotal = total
+        if var cipher = aesCipher {
+            let code = cipher.authCode()
+            try write(code)
+            finalTotal += UInt64(code.count)
+        }
+
+        // ZipCrypto's CRC was precomputed (its check byte needed it); AES
+        // stores 0. Plain streaming patches the freshly computed one.
+        let patchedCRC: UInt32 = (zipCrypto != nil || aes != nil)
+            ? precomputedCRC : CRC32.finalize(runningCRC)
 
         handle.seek(toFileOffset: localOffset + 14)
-        try handle.write(contentsOf: Data(Zip.littleEndian32(finalizedCRC)))
+        try handle.write(contentsOf: Data(Zip.littleEndian32(patchedCRC)))
         if let patch = zip64CompressedPatch {
             handle.seek(toFileOffset: patch)
-            try handle.write(contentsOf: Data(Zip.littleEndian64(total)))
+            try handle.write(contentsOf: Data(Zip.littleEndian64(finalTotal)))
         } else {
             handle.seek(toFileOffset: localOffset + 18)
-            try handle.write(contentsOf: Data(Zip.littleEndian32(UInt32(truncatingIfNeeded: total))))
+            try handle.write(contentsOf: Data(Zip.littleEndian32(UInt32(truncatingIfNeeded: finalTotal))))
         }
         handle.seek(toFileOffset: position)
-        return (finalizedCRC, total)
+        return (patchedCRC, finalTotal)
     }
 
     private func externalAttributes(isDirectory: Bool, posixMode: UInt16) -> UInt32 {
         let dosAttrs: UInt32 = isDirectory ? 0x10 : 0
         return UInt32(posixMode) << 16 | dosAttrs
+    }
+
+    /// The 0x9901 extra field: AE version 2, vendor "AE", strength 3
+    /// (AES-256), and the real compression method underneath the wrapper.
+    private static func aesExtraField(actualMethod: UInt16) -> Data {
+        var extra: [UInt8] = [0x01, 0x99]
+        extra += Zip.littleEndian16(7)
+        extra += Zip.littleEndian16(2)             // AE-2
+        extra += [0x41, 0x45]                      // "AE"
+        extra += [3]                               // strength: AES-256
+        extra += Zip.littleEndian16(actualMethod)
+        return Data(extra)
+    }
+
+    private static func randomData(_ count: Int) throws -> Data {
+        var bytes = [UInt8](repeating: 0, count: count)
+        let status = SecRandomCopyBytes(kSecRandomDefault, count, &bytes)
+        guard status == errSecSuccess else {
+            throw DizunError.ioFailure("system random unavailable")
+        }
+        return Data(bytes)
+    }
+
+    /// ZipCrypto's check byte needs the plaintext CRC before any data is
+    /// written, so streaming sources get a pre-pass.
+    private static func crcOfContents(at url: URL) throws -> UInt32 {
+        let input = try FileHandle(forReadingFrom: url)
+        defer { try? input.close() }
+        var crc: UInt32 = CRC32.initial
+        while true {
+            let chunk = try input.read(upToCount: 1 << 20) ?? Data()
+            if chunk.isEmpty { break }
+            CRC32.update(&crc, chunk)
+        }
+        return CRC32.finalize(crc)
     }
 
     private func writeCentralRecord(_ record: CentralRecord) throws {
@@ -315,9 +461,10 @@ public final class ZipWriter {
         header += Zip.littleEndian32(sizeSentinel ? 0xFFFF_FFFF : UInt32(truncatingIfNeeded: record.compressedSize))
         header += Zip.littleEndian32(uncompSentinel ? 0xFFFF_FFFF : UInt32(truncatingIfNeeded: record.uncompressedSize))
         header += Zip.littleEndian16(UInt16(record.nameBytes.count))
-        var extraLength: UInt16 = 0
+        let aesBytes: Data? = record.aesActualMethod.map { Self.aesExtraField(actualMethod: $0) }
+        var extraLength: UInt16 = UInt16(aesBytes?.count ?? 0)
         if needsZip64Extra {
-            extraLength = 4 + (uncompSentinel ? 8 : 0) + (sizeSentinel ? 8 : 0) + (offsetSentinel ? 8 : 0)
+            extraLength += 4 + (uncompSentinel ? 8 : 0) + (sizeSentinel ? 8 : 0) + (offsetSentinel ? 8 : 0)
         }
         header += Zip.littleEndian16(extraLength)
         header += Zip.littleEndian16(0)            // comment length
@@ -327,6 +474,9 @@ public final class ZipWriter {
         header += Zip.littleEndian32(offsetSentinel ? 0xFFFF_FFFF : UInt32(truncatingIfNeeded: record.localHeaderOffset))
         try write(Data(header))
         try write(record.nameBytes)
+        if let aesBytes {
+            try write(aesBytes)
+        }
         if needsZip64Extra {
             var extra: [UInt8] = [0x01, 0x00]
             var dataSize: UInt16 = 0

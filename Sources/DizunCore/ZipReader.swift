@@ -22,6 +22,8 @@ public final class ZipReader {
         var localHeaderOffset: UInt64
         var externalAttributes: UInt32
         var madeByUnix: Bool
+        var aesStrength: UInt8?
+        var aesActualMethod: UInt16?
     }
 
     public private(set) var entries: [ZipEntry] = []
@@ -73,9 +75,12 @@ public final class ZipReader {
     }
 
     /// Extract one entry, streaming chunks to `write`. Verifies the local
-    /// header, enforces the declared size and the CRC-32, and refuses
-    /// encrypted or unsupported-method entries.
-    public func extract(_ entry: ZipEntry, write: (Data) throws -> Void) throws {
+    /// header, decrypts encrypted entries with `password` (nil on an
+    /// encrypted entry throws `passwordRequired`), enforces the declared
+    /// size, the expansion ratio and — except for AE-2 entries, which
+    /// authenticate with HMAC instead — the CRC-32.
+    public func extract(_ entry: ZipEntry, password: String? = nil,
+                        write: (Data) throws -> Void) throws {
         guard let raw = rawEntries.first(where: { $0.localHeaderOffset == entry.localHeaderOffset
             && $0.nameBytes == entry.nameBytes }) else {
             throw DizunError.corrupt("entry not found in this archive")
@@ -83,18 +88,28 @@ public final class ZipReader {
         guard UInt64(entry.uncompressedSize) <= limits.maxEntrySize else {
             throw DizunError.limitExceeded("entry \(entry.name): declared size over the per-entry cap")
         }
-        guard raw.flags & Zip.flagEncrypted == 0 else {
-            throw DizunError.unsupportedEncryption(entry: entry.name)
+
+        let encrypted = raw.flags & Zip.flagEncrypted != 0
+        if encrypted, password == nil {
+            throw DizunError.passwordRequired
         }
-        guard raw.method == Zip.methodStore || raw.method == Zip.methodDeflate else {
-            throw DizunError.unsupportedMethod(raw.method, entry: entry.name)
-        }
-        if raw.method == Zip.methodDeflate, raw.compressedSize > 0 {
-            let ratio = Double(raw.uncompressedSize) / Double(raw.compressedSize)
-            guard ratio <= limits.maxExpansionRatio else {
-                throw DizunError.limitExceeded(
-                    "entry \(entry.name): expansion ratio \(Int(ratio))x over the cap")
+
+        // Method dispatch: plain entries are Store/Deflate; encrypted ones
+        // are method 99 (WinZip AES wrapping Store/Deflate) or plain
+        // Store/Deflate under ZipCrypto.
+        var effectiveMethod = raw.method
+        if !encrypted {
+            guard effectiveMethod == Zip.methodStore || effectiveMethod == Zip.methodDeflate else {
+                throw DizunError.unsupportedMethod(effectiveMethod, entry: entry.name)
             }
+        } else if raw.method == Zip.methodAES {
+            guard raw.aesActualMethod == Zip.methodStore || raw.aesActualMethod == Zip.methodDeflate,
+                  raw.aesStrength != nil else {
+                throw DizunError.corrupt("AES entry without a usable 0x9901 extra field")
+            }
+            effectiveMethod = raw.aesActualMethod!
+        } else if raw.method != Zip.methodStore && raw.method != Zip.methodDeflate {
+            throw DizunError.unsupportedMethod(raw.method, entry: entry.name)
         }
 
         // Cross-check the local header before trusting the data location.
@@ -104,6 +119,65 @@ public final class ZipReader {
             throw DizunError.corrupt("entry \(entry.name): data runs past the end of the archive")
         }
         let payload = data.subdata(in: (data.startIndex + dataStart)..<(data.startIndex + dataEnd))
+
+        // Decrypt first; the codec then runs over the plaintext bytes.
+        let compressed: Data
+        let authenticatesByHMAC: Bool
+        if encrypted, raw.method == Zip.methodAES {
+            let strength = WinZipAES.Strength(rawValue: raw.aesStrength!)!
+            let saltBytes = strength.saltBytes
+            let overhead = UInt64(saltBytes + 2 + WinZipAES.authCodeSize)
+            guard raw.compressedSize >= overhead else {
+                throw DizunError.corrupt("entry \(entry.name): AES data shorter than its framing")
+            }
+            let salt = payload.prefix(saltBytes)
+            let verifier = payload.subdata(in: (payload.startIndex + saltBytes)..<(payload.startIndex + saltBytes + 2))
+            let cipherEnd = payload.startIndex + Int(raw.compressedSize) - WinZipAES.authCodeSize
+            let cipher = payload.subdata(in: (payload.startIndex + saltBytes + 2)..<cipherEnd)
+            let trailer = payload.suffix(WinZipAES.authCodeSize)
+            guard var aes = WinZipAES(password: password!, strength: strength,
+                                      salt: salt, passwordVerifier: verifier) else {
+                throw DizunError.wrongPassword(entry: entry.name)
+            }
+            var decrypted = aes.process(cipher)
+            guard aes.verifyAuthCode(trailer) else {
+                decrypted = Data()
+                throw DizunError.wrongPassword(entry: entry.name)
+            }
+            compressed = decrypted
+            authenticatesByHMAC = true
+        } else if encrypted {
+            guard raw.compressedSize >= ZipCryptoCipher.headerSize else {
+                throw DizunError.corrupt("entry \(entry.name): encrypted data shorter than its header")
+            }
+            // Check byte: high CRC byte, or high DOS-time byte when the
+            // entry carries a data descriptor (streamed by the producer).
+            let checkByte: UInt8
+            if raw.flags & Zip.flagHasDataDescriptor != 0, raw.crc32 == 0 {
+                checkByte = UInt8(raw.dosTime >> 8)
+            } else {
+                checkByte = UInt8(raw.crc32 >> 24)
+            }
+            let header = payload.prefix(ZipCryptoCipher.headerSize)
+            let body = payload.subdata(in: (payload.startIndex + ZipCryptoCipher.headerSize)..<payload.endIndex)
+            guard var cipher = ZipCryptoCipher(password: password!, header: header,
+                                               checkByte: checkByte) else {
+                throw DizunError.wrongPassword(entry: entry.name)
+            }
+            compressed = cipher.decrypt(body)
+            authenticatesByHMAC = false
+        } else {
+            compressed = payload
+            authenticatesByHMAC = false
+        }
+
+        if effectiveMethod == Zip.methodDeflate, compressed.count > 0 {
+            let ratio = Double(raw.uncompressedSize) / Double(compressed.count)
+            guard ratio <= limits.maxExpansionRatio else {
+                throw DizunError.limitExceeded(
+                    "entry \(entry.name): expansion ratio \(Int(ratio))x over the cap")
+            }
+        }
 
         var crc: UInt32 = CRC32.initial
         var written: UInt64 = 0
@@ -116,22 +190,25 @@ public final class ZipReader {
             written += UInt64(chunk.count)
         }
 
-        switch raw.method {
-        case Zip.methodStore:
-            try emit(payload)
-        default:
+        if effectiveMethod == Zip.methodStore {
+            try emit(compressed)
+        } else {
             var fed = false
             try DeflateStream.run(encode: false, read: {
                 if fed { return nil }
                 fed = true
-                return payload.isEmpty ? nil : payload
+                return compressed.isEmpty ? nil : compressed
             }, write: { try emit($0) })
         }
         guard written == raw.uncompressedSize else {
             throw DizunError.sizeMismatch(entry: entry.name)
         }
-        guard CRC32.finalize(crc) == raw.crc32 else {
-            throw DizunError.crcMismatch(entry: entry.name)
+        // AE-2 stores CRC 0 and authenticates via HMAC (verified above);
+        // AE-1 archives that kept the CRC still get it checked.
+        if !authenticatesByHMAC || raw.crc32 != 0 {
+            guard CRC32.finalize(crc) == raw.crc32 else {
+                throw DizunError.crcMismatch(entry: entry.name)
+            }
         }
     }
 
@@ -163,7 +240,9 @@ public final class ZipReader {
                         localHeaderOffset: raw.localHeaderOffset,
                         dosDate: raw.dosDate,
                         dosTime: raw.dosTime,
-                        unixMode: unixMode)
+                        unixMode: unixMode,
+                        aesStrength: raw.aesStrength,
+                        aesActualMethod: raw.aesActualMethod)
     }
 
     private static func parseCentralDirectory(_ data: Data, limits: ExtractionLimits) throws -> [RawEntry] {
@@ -244,12 +323,15 @@ public final class ZipReader {
             _ = try c.bytes(commentLength)
 
             var utf8NameOverride: String?
-            (uncompressedSize, compressedSize, localOffset, utf8NameOverride) =
+            var aesStrength: UInt8?
+            var aesActualMethod: UInt16?
+            (uncompressedSize, compressedSize, localOffset, utf8NameOverride, aesStrength, aesActualMethod) =
                 try applyExtra(extra,
                                uncompressed: uncompressedSize,
                                compressed: compressedSize,
                                localOffset: localOffset,
-                               nameBytes: nameBytes)
+                               nameBytes: nameBytes,
+                               method: method)
 
             entries.append(RawEntry(nameBytes: nameBytes,
                                     utf8NameOverride: utf8NameOverride,
@@ -262,22 +344,28 @@ public final class ZipReader {
                                     uncompressedSize: uncompressedSize,
                                     localHeaderOffset: localOffset,
                                     externalAttributes: externalAttributes,
-                                    madeByUnix: versionMadeBy >> 8 == 3))
+                                    madeByUnix: versionMadeBy >> 8 == 3,
+                                    aesStrength: aesStrength,
+                                    aesActualMethod: aesActualMethod))
             offset = c.offset
         }
         return entries
     }
 
-    /// Walk the extra fields: ZIP64 sizes/offset (0x0001) and the Info-ZIP
-    /// Unicode Path (0x7075, trusted only when its CRC matches the raw name).
+    /// Walk the extra fields: ZIP64 sizes/offset (0x0001), the Info-ZIP
+    /// Unicode Path (0x7075, trusted only when its CRC matches the raw name)
+    /// and the WinZip AES descriptor (0x9901).
     private static func applyExtra(_ extra: Data,
                                    uncompressed: UInt64, compressed: UInt64,
-                                   localOffset: UInt64, nameBytes: Data)
-        throws -> (UInt64, UInt64, UInt64, String?) {
+                                   localOffset: UInt64, nameBytes: Data,
+                                   method: UInt16)
+        throws -> (UInt64, UInt64, UInt64, String?, UInt8?, UInt16?) {
         var uncompressedSize = uncompressed
         var compressedSize = compressed
         var localHeaderOffset = localOffset
         var utf8NameOverride: String?
+        var aesStrength: UInt8?
+        var aesActualMethod: UInt16?
         var cursor = Data.Cursor(extra)
         while cursor.remaining >= 4 {
             let headerID = try cursor.u16()
@@ -297,11 +385,19 @@ public final class ZipReader {
                    let decoded = String(data: utf8, encoding: .utf8) {
                     utf8NameOverride = decoded
                 }
+            case 0x9901:
+                // version(2) vendor "AE"(2) strength(1) actual method(2)
+                guard method == Zip.methodAES, size >= 7 else { break }
+                _ = try b.u16()                    // vendor version (1=AE-1, 2=AE-2)
+                _ = try b.u16()                    // vendor ID "AE"
+                aesStrength = try b.u8()
+                aesActualMethod = try b.u16()
             default:
                 break
             }
         }
-        return (uncompressedSize, compressedSize, localHeaderOffset, utf8NameOverride)
+        return (uncompressedSize, compressedSize, localHeaderOffset, utf8NameOverride,
+                aesStrength, aesActualMethod)
     }
 
     /// Scan backwards for the end-of-central-directory record; the comment

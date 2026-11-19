@@ -6,9 +6,13 @@ import Foundation
 public enum Packer {
     public struct Options: Sendable {
         public var nameEncoding: ZipWriter.NameEncoding = .utf8
+        public var encryption: ZipWriter.Encryption = .none
         public var excludeMacJunk = true
-        public init(nameEncoding: ZipWriter.NameEncoding = .utf8, excludeMacJunk: Bool = true) {
+        public init(nameEncoding: ZipWriter.NameEncoding = .utf8,
+                    encryption: ZipWriter.Encryption = .none,
+                    excludeMacJunk: Bool = true) {
             self.nameEncoding = nameEncoding
+            self.encryption = encryption
             self.excludeMacJunk = excludeMacJunk
         }
     }
@@ -81,6 +85,7 @@ public enum Packer {
 
         var writerOptions = ZipWriter.Options()
         writerOptions.nameEncoding = options.nameEncoding
+        writerOptions.encryption = options.encryption
         let writer = try ZipWriter(url: partURL, options: writerOptions)
         do {
             for dir in directories {

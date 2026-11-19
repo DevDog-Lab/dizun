@@ -18,6 +18,9 @@ public enum Unpacker {
         public var destination: URL?
         /// Force the name encoding for entries without the UTF-8 flag.
         public var forcedEncoding: NameEncoding?
+        /// Password for encrypted entries; nil on an archive that needs one
+        /// fails before anything is written (`DizunError.passwordRequired`).
+        public var password: String?
         public var folderPolicy: FolderPolicy = .onlyMultipleTopLevel
         public var limits: ExtractionLimits = ExtractionLimits()
         /// Skip macOS bookkeeping entries (`__MACOSX/`, `.DS_Store`, `._*`)
@@ -26,11 +29,13 @@ public enum Unpacker {
         public var skipMacJunk = true
         public init(destination: URL? = nil,
                     forcedEncoding: NameEncoding? = nil,
+                    password: String? = nil,
                     folderPolicy: FolderPolicy = .onlyMultipleTopLevel,
                     limits: ExtractionLimits = ExtractionLimits(),
                     skipMacJunk: Bool = true) {
             self.destination = destination
             self.forcedEncoding = forcedEncoding
+            self.password = password
             self.folderPolicy = folderPolicy
             self.limits = limits
             self.skipMacJunk = skipMacJunk
@@ -93,9 +98,9 @@ public enum Unpacker {
             guard isDir.boolValue else {
                 throw Failure.destinationNotADirectory(destBase.path)
             }
-        } else {
-            try FileManager.default.createDirectory(at: destBase, withIntermediateDirectories: true)
         }
+        // The destination itself is created only after every fail-fast check
+        // has passed — a password prompt or refusal must find no debris.
 
         // Plan phase: nothing is written until every entry has a safe,
         // collision-free target.
@@ -143,19 +148,27 @@ public enum Unpacker {
         }
         guard !work.isEmpty else { throw Failure.emptyArchive }
 
+        // Encrypted content needs a password before anything is written, so
+        // a retry after the prompt finds no debris (SPEC §6).
+        if options.password == nil,
+           work.contains(where: { $0.entry.isEncrypted && !$0.entry.isDirectory }) {
+            throw DizunError.passwordRequired
+        }
+
         // Pre-flight budget: fail before touching the disk (SPEC §6).
         let required = reader.declaredTotalSize
         guard required <= options.limits.maxTotalUncompressed else {
             throw DizunError.limitExceeded(
                 "declared total \(required) bytes over the archive cap")
         }
-        if let available = freeSpace(at: destBase) {
+        if let available = freeSpace(at: destBase) ?? freeSpace(at: destBase.deletingLastPathComponent()) {
             let budget = available > options.limits.spaceMargin
                 ? available - options.limits.spaceMargin : 0
             guard required <= budget else {
                 throw Failure.insufficientSpace(required: required, available: available)
             }
         }
+        try FileManager.default.createDirectory(at: destBase, withIntermediateDirectories: true)
 
         let topNames = Set(work.map { $0.components[0] })
         let wrap: Bool
@@ -222,7 +235,7 @@ public enum Unpacker {
                     at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 let out = try PathUtil.createFileExclusively(at: target)
                 do {
-                    try reader.extract(entry) { chunk in
+                    try reader.extract(entry, password: options.password) { chunk in
                         try out.handle.write(contentsOf: chunk)
                     }
                     out.close()
