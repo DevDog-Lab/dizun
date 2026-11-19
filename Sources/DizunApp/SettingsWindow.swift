@@ -24,6 +24,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         window.title = "設定"
         window.isReleasedWhenClosed = false
 
+        window.collectionBehavior = [.moveToActiveSpace]
         let heading = DizunRows.sectionTitle("画像最適化の既定値")
 
         let edge = Self.digitsField()

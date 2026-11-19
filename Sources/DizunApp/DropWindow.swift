@@ -24,6 +24,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
+        window.collectionBehavior = [.moveToActiveSpace]
 
         let title = NSTextField(labelWithString: "DIZUN")
         title.font = .boldSystemFont(ofSize: 22)
@@ -71,17 +72,28 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             drop.widthAnchor.constraint(equalTo: stack.widthAnchor),
             drop.heightAnchor.constraint(equalToConstant: 140),
             tabs.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            tabs.heightAnchor.constraint(greaterThanOrEqualToConstant: 170),
         ])
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+    }
+
+    /// Re-assert visibility (used by the delayed launch kick): brings the
+    /// window front on the active space even when the first attempt lost a
+    /// focus race with another app.
+    func showWindowAgain() {
+        guard let window else { return }
+        window.collectionBehavior = [.moveToActiveSpace]
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func tabItem(label: String, view: NSView) -> NSTabViewItem {
         let item = NSTabViewItem(identifier: label)
         item.label = label
         item.view = view
-        view.translatesAutoresizingMaskIntoConstraints = false
         return item
     }
 
@@ -101,14 +113,11 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             ["なし", "AES-256", "ZipCrypto"],
             target: self, action: #selector(encryptionChanged(_:)),
             selected: cryptoSelection)
-        let cryptoHint = DizunRows.hint("暗号化すると二重ZIPでファイル構成も隠されます")
-        cryptoHint.leadingAnchor.constraint(
-            equalTo: crypto.leadingAnchor).isActive = true
         return DizunRows.group([
             DizunRows.row(label: "圧縮時のファイル名", controls: [encoding]),
-            DizunRows.row(label: "暗号化", controls: [crypto]),
-            cryptoHint,
-        ], spacing: 10)
+            DizunRows.row(label: "暗号化", controls: [crypto],
+                          hint: "二重ZIPで構成も隠す"),
+        ])
     }
 
     private func imageTab() -> NSView {

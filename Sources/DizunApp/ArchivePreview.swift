@@ -38,6 +38,7 @@ final class ArchivePreviewWindowController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
+        window.collectionBehavior = [.moveToActiveSpace]
 
         let header = makeHeader()
         let tableScroll = makeTable()

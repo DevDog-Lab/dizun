@@ -31,6 +31,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showPreview(of: url, autoQuit: self?.droplet == nil)
         }
         launched = true
+        // Re-assert activation once the run loop is live: some launch
+        // contexts (Dock reopen, background launch) leave a regular app
+        // unactivated, which can leave windows created-but-never-mapped.
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.droplet?.showWindowAgain()
+        }
         if pending.isEmpty {
             droplet = DropletWindowController(coordinator: coordinator)
             droplet?.show()
@@ -72,6 +80,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// Double-clicking the app again while it runs must show a window, not
+    /// silently do nothing.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows {
+            droplet?.show()
+        }
+        return true
     }
 
     private func enqueue(_ urls: [URL]) {

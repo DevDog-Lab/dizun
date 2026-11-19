@@ -21,6 +21,7 @@ final class AboutWindowController {
         window.title = "DIZUNについて"
         window.isReleasedWhenClosed = false
 
+        window.collectionBehavior = [.moveToActiveSpace]
         let title = NSTextField(labelWithString: "DIZUN")
         title.font = .boldSystemFont(ofSize: 28)
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
