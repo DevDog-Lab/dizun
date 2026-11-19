@@ -64,6 +64,12 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         encodingRow.orientation = .horizontal
         encodingRow.spacing = 8
 
+        // ZIP-side settings collected; the image row below joins the tab view.
+        let zipTab = NSStackView(views: [encodingRow])
+        zipTab.orientation = .vertical
+        zipTab.spacing = 8
+        zipTab.alignment = .leading
+
         // Image optimization: custom long-edge cap (px), JPEG target size
         // (KB), and Trash backup for originals. Fields are digits-only.
         let resizeLabel = NSTextField(labelWithString: "画像最適化:")
@@ -92,8 +98,26 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         let backupToggle = NSButton(checkboxWithTitle: "元画像をゴミ箱へ（最適化の前に元ファイルを退避）",
                                     target: self, action: #selector(backupChanged(_:)))
         backupToggle.state = Settings.optimizeBackupToTrash ? .on : .off
+        let imageTab = NSStackView(views: [optimizeRow, backupToggle])
+        imageTab.orientation = .vertical
+        imageTab.spacing = 8
+        imageTab.alignment = .leading
 
-        let stack = NSStackView(views: [title, subtitle, drop, encodingRow, optimizeRow, backupToggle])
+        // Tabs keep ZIP settings and image settings from tangling together.
+        let tabs = NSTabView()
+        tabs.tabViewType = .topTabsBezelBorder
+        tabs.translatesAutoresizingMaskIntoConstraints = false
+        let zipItem = NSTabViewItem(identifier: "zip")
+        zipItem.label = "圧縮・解凍"
+        zipItem.view = zipTab
+        let imageItem = NSTabViewItem(identifier: "image")
+        imageItem.label = "画像最適化"
+        imageItem.view = imageTab
+        tabs.addTabViewItem(zipItem)
+        tabs.addTabViewItem(imageItem)
+        let tabHeight = max(zipTab.fittingSize.height, imageTab.fittingSize.height) + 36
+
+        let stack = NSStackView(views: [title, subtitle, drop, tabs])
         stack.orientation = .vertical
         stack.spacing = 12
         stack.alignment = .centerX
@@ -107,6 +131,8 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
             drop.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
             drop.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
+            tabs.widthAnchor.constraint(equalTo: drop.widthAnchor),
+            tabs.heightAnchor.constraint(equalToConstant: tabHeight),
         ])
         // Size the window to what the rows actually need (a fixed height
         // used to clip the bottom row out of view).

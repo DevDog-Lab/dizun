@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = self
+        NSApp.mainMenu = buildMainMenu()
         coordinator.requestPassword = { title, confirm in
             MainActor.assumeIsolated {
                 if confirm {
@@ -93,6 +94,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         }
+    }
+
+    // MARK: - Menu bar
+
+    /// Minimal application menu: About, Settings, Close, Quit. Built in code
+    /// (no nib); the Services submenu keeps Finder services reachable here.
+    private func buildMainMenu() -> NSMenu {
+        let main = NSMenu()
+
+        let appItem = NSMenuItem(title: "DIZUN", action: nil, keyEquivalent: "")
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "DIZUNについて", action: #selector(showAbout), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "設定…", action: #selector(showSettings), keyEquivalent: ",")
+        appMenu.addItem(.separator())
+        let services = appMenu.addItem(withTitle: "サービス", action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu()
+        services.submenu = servicesMenu
+        NSApp.servicesMenu = servicesMenu
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "閉じる", action: #selector(performClose(_:)), keyEquivalent: "w")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "DIZUNを終了", action: #selector(NSApplication.terminate(_:)),
+                         keyEquivalent: "q")
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+        return main
+    }
+
+    @objc private func showAbout() {
+        MainActor.assumeIsolated {
+            AboutWindowController.shared.show()
+        }
+    }
+
+    @objc private func showSettings() {
+        MainActor.assumeIsolated {
+            SettingsWindowController.shared.show()
+        }
+    }
+
+    @objc private func performClose(_ sender: Any?) {
+        NSApp.keyWindow?.performClose(nil)
     }
 
     // MARK: - Finder Services (NSServices in Info.plist)
