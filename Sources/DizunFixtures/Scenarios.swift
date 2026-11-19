@@ -571,8 +571,8 @@ public enum Scenarios {
                    "opt-out did not keep __MACOSX")
     }
 
-    /// AES-256 (WinZip AE-2): encrypted write, entry metadata, password
-    /// errors, and a byte-exact round trip.
+    /// AES-256 (WinZip AE-2) double-ZIP: structure hidden, entry metadata,
+    /// password errors, and a byte-exact auto-unwrap round trip.
     public static func encryptedAESRoundTrip() throws {
         let work = tempDir("aes")
         defer { try? FileManager.default.removeItem(at: work) }
@@ -589,17 +589,22 @@ public enum Scenarios {
         _ = try Packer.pack([src], to: zipURL,
                             options: .init(encryption: .aes256(password: "test-パスワード123")))
 
+        // The outer archive hides the structure: exactly one encrypted
+        // entry, the inner ZIP, and the nested marker comment.
         let reader = try ZipReader(url: zipURL)
-        let secret = reader.entries.first { $0.name.hasSuffix("秘密.txt") }
-        try assert(secret != nil, "encrypted entry not listed")
-        try assert(secret!.isEncrypted, "entry missing the encrypted flag")
-        try assert(secret!.method == Zip.methodAES, "method should be 99, is \(secret!.method)")
-        try assert(secret!.aesStrength == 3, "AES strength should be 3")
-        try assert(secret!.aesActualMethod == Zip.methodDeflate,
-                   "actual method should be deflate")
-        try assert(secret!.crc32 == 0, "AE-2 must store CRC 0")
-        let empty = reader.entries.first { $0.name.hasSuffix("空.txt") }
-        try assert(empty?.isEncrypted == true, "empty entry not encrypted")
+        try assert(reader.archiveComment == Packer.nestedArchiveComment,
+                   "missing nested marker comment: \(reader.archiveComment ?? "nil")")
+        let plainFiles = reader.entries.filter { !$0.isDirectory }
+        try assert(plainFiles.count == 1, "outer should hold one entry, has \(plainFiles.count)")
+        let outer = plainFiles[0]
+        try assert(outer.name == "secret.zip", "inner entry name wrong: \(outer.name)")
+        try assert(outer.isEncrypted, "outer entry missing the encrypted flag")
+        try assert(outer.method == Zip.methodAES, "method should be 99, is \(outer.method)")
+        try assert(outer.aesStrength == 3, "AES strength should be 3")
+        try assert(outer.crc32 == 0, "AE-2 must store CRC 0")
+        // Names hidden until decrypted.
+        try assert(!reader.entries.contains { $0.name.contains("秘密") || $0.name.contains("空") },
+                   "inner file names leaked into the outer directory")
 
         // No password → refused before anything is written.
         let out1 = work.appendingPathComponent("out1", isDirectory: true)
@@ -624,7 +629,7 @@ public enum Scenarios {
             }
         }
 
-        // Correct password → byte-exact.
+        // Correct password → auto-unwrap → byte-exact, intermediate removed.
         let out3 = work.appendingPathComponent("out3", isDirectory: true)
         let result = try Unpacker.unpack(zipURL: zipURL, options: .init(
             destination: out3, password: "test-パスワード123"))
@@ -633,6 +638,8 @@ public enum Scenarios {
                    "AES round trip corrupted the payload")
         try assert(contents("機密資料/空.txt", in: out3) == Data(),
                    "encrypted empty file corrupted")
+        try assert(!exists(out3.appendingPathComponent("secret.zip")),
+                   "inner intermediate left behind after unwrap")
     }
 
     /// PKWARE traditional (ZipCrypto): legacy framing, check byte, password
@@ -649,14 +656,19 @@ public enum Scenarios {
         _ = try Packer.pack([src], to: zipURL,
                             options: .init(encryption: .zipCrypto(password: "test-pw-1234")))
 
+        // Double-ZIP outer: one encrypted entry, marker comment, names hidden.
         let reader = try ZipReader(url: zipURL)
-        let entry = reader.entries.first { $0.name.hasSuffix("文書.txt") }
-        try assert(entry != nil, "entry not listed")
-        try assert(entry!.isEncrypted, "missing encrypted flag")
-        try assert(entry!.method == Zip.methodDeflate || entry!.method == Zip.methodStore,
-                   "ZipCrypto must keep the plain method")
-        try assert(entry!.encryptionKind == .zipCrypto, "kind should be zipCrypto")
-        try assert(entry!.crc32 != 0, "ZipCrypto keeps the real CRC")
+        try assert(reader.archiveComment == Packer.nestedArchiveComment,
+                   "missing nested marker comment")
+        let plainFiles = reader.entries.filter { !$0.isDirectory }
+        try assert(plainFiles.count == 1, "outer should hold one entry")
+        let entry = plainFiles[0]
+        try assert(entry.name == "legacy.zip", "inner entry name wrong: \(entry.name)")
+        try assert(entry.isEncrypted, "missing encrypted flag")
+        try assert(entry.encryptionKind == .zipCrypto, "kind should be zipCrypto")
+        try assert(entry.crc32 != 0, "ZipCrypto keeps the real CRC")
+        try assert(!reader.entries.contains { $0.name.contains("文書") },
+                   "inner file names leaked into the outer directory")
 
         do {
             _ = try Unpacker.unpack(zipURL: zipURL, options: .init(
@@ -676,11 +688,14 @@ public enum Scenarios {
             }
         }
 
+        // Correct password → auto-unwrap, intermediate removed.
         let out3 = work.appendingPathComponent("out3", isDirectory: true)
         _ = try Unpacker.unpack(zipURL: zipURL, options: .init(
             destination: out3, password: "test-pw-1234"))
         try assert(contents("資料/文書.txt", in: out3) == payload,
                    "ZipCrypto round trip corrupted the payload")
+        try assert(!exists(out3.appendingPathComponent("legacy.zip")),
+                   "inner intermediate left behind after unwrap")
     }
 
     public static let all: [(name: String, run: () throws -> Void)] = [

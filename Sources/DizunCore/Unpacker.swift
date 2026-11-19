@@ -179,7 +179,7 @@ public enum Unpacker {
         }
 
         let base: URL
-        let root: URL
+        var root: URL
         var topItems: [URL] = []
         var renames: [String: String] = [:]
         var owned = PathUtil.OwnedItems()
@@ -266,6 +266,37 @@ public enum Unpacker {
                 try extractOne(entry, components)
             }
             if wrap { applyQuarantine(to: base, named: base.lastPathComponent) }
+
+            // Encrypted DIZUN archives are double-ZIPs: unwrap the single
+            // inner archive so the user sees the real contents, then remove
+            // our intermediate. The comment marker keeps this from touching
+            // ordinary archives that merely contain a ZIP.
+            var unwrappedTopItems = topItems
+            var unwrappedRoot = root
+            if reader.archiveComment == Packer.nestedArchiveComment,
+               reader.entries.filter({ !$0.isDirectory }).count == 1,
+               topItems.count == 1,
+               let inner = topItems.first,
+               inner.pathExtension.lowercased() == "zip" {
+                var unwrapOptions = options
+                unwrapOptions.destination = base
+                unwrapOptions.password = nil          // the inner archive is plaintext
+                let innerResult = try unpack(zipURL: inner, options: unwrapOptions)
+                try FileManager.default.removeItem(at: inner)
+                files -= 1                              // the removed intermediate
+                files += innerResult.extractedFiles
+                directories += innerResult.extractedDirectories
+                renamedDuplicates += innerResult.renamedDuplicates
+                unwrappedTopItems = innerResult.extractedTopItems
+                unwrappedRoot = innerResult.root
+                if let quarantine {
+                    for item in innerResult.extractedTopItems where !Quarantine.apply(quarantine, to: item) {
+                        quarantineFailures.append(item.lastPathComponent)
+                    }
+                }
+            }
+            topItems = unwrappedTopItems
+            root = unwrappedRoot
         } catch {
             owned.removeAll()
             throw error

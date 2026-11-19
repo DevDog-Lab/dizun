@@ -4,6 +4,10 @@ import Foundation
 /// names, writes to an exclusive `.part` file and renames on completion, so a
 /// half-written archive never appears under its real name.
 public enum Packer {
+    /// Archive comment marking an encrypted double-ZIP (structure hidden).
+    /// `Unpacker` auto-unwraps archives carrying it.
+    public static let nestedArchiveComment = "DIZUN-NESTED-1"
+
     public struct Options: Sendable {
         public var nameEncoding: ZipWriter.NameEncoding = .utf8
         public var encryption: ZipWriter.Encryption = .none
@@ -36,7 +40,9 @@ public enum Packer {
     }
 
     /// Create a ZIP from files and/or folders. Each source contributes one
-    /// top-level entry named after itself.
+    /// top-level entry named after itself. With encryption, the real archive
+    /// is wrapped in an encrypted outer ZIP — the ZIP directory is plaintext
+    /// by format design, so only the double wrap hides the structure.
     public static func pack(_ sources: [URL], to destination: URL,
                             options: Options = Options(),
                             progress: ((String) -> Void)? = nil,
@@ -83,6 +89,27 @@ public enum Packer {
         directories.sort()
         files.sort { $0.name < $1.name }
 
+        if case .none = options.encryption {
+            return try writeSingleStage(partURL: partURL, destination: destination,
+                                        files: files, directories: directories,
+                                        skippedSymlinks: skippedSymlinks,
+                                        excludedJunk: excludedJunk,
+                                        options: options, progress: progress,
+                                        shouldCancel: shouldCancel)
+        }
+        return try writeNestedEncrypted(partURL: partURL, destination: destination,
+                                        sources: sources, options: options,
+                                        progress: progress, shouldCancel: shouldCancel)
+    }
+
+    private static func writeSingleStage(partURL: URL, destination: URL,
+                                         files: [(name: String, url: URL)],
+                                         directories: [String],
+                                         skippedSymlinks: [String],
+                                         excludedJunk: [String],
+                                         options: Options,
+                                         progress: ((String) -> Void)?,
+                                         shouldCancel: (() -> Bool)?) throws -> Result {
         var writerOptions = ZipWriter.Options()
         writerOptions.nameEncoding = options.nameEncoding
         writerOptions.encryption = options.encryption
@@ -117,6 +144,52 @@ public enum Packer {
                       excludedJunk: excludedJunk)
     }
 
+    /// Inner (plaintext, real contents) → outer (encrypted, one entry,
+    /// marked with `nestedArchiveComment`). `Result` reports the *inner*
+    /// counts — what the user actually packed.
+    private static func writeNestedEncrypted(partURL: URL, destination: URL,
+                                             sources: [URL],
+                                             options: Options,
+                                             progress: ((String) -> Void)?,
+                                             shouldCancel: (() -> Bool)?) throws -> Result {
+        let folder = destination.deletingLastPathComponent()
+        let stem = destination.deletingPathExtension().lastPathComponent
+        let innerURL = folder.appendingPathComponent(".dizun-inner-\(UUID().uuidString).zip")
+        defer { try? FileManager.default.removeItem(at: innerURL) }
+
+        var innerOptions = options
+        innerOptions.encryption = .none
+        let inner = try pack(sources, to: innerURL, options: innerOptions,
+                             progress: progress, shouldCancel: shouldCancel)
+
+        var outerOptions = ZipWriter.Options()
+        outerOptions.encryption = options.encryption
+        let writer = try ZipWriter(url: partURL, options: outerOptions)
+        writer.archiveComment = nestedArchiveComment
+        do {
+            if shouldCancel?() == true { throw DizunError.cancelled }
+            progress?(destination.lastPathComponent)
+            try writer.addFile(stem + ".zip", fileURL: innerURL)
+            try writer.finalize()
+        } catch {
+            try? FileManager.default.removeItem(at: partURL)
+            throw error
+        }
+
+        do {
+            try FileManager.default.moveItem(at: partURL, to: destination)
+        } catch {
+            try? FileManager.default.removeItem(at: partURL)
+            throw DizunError.ioFailure("cannot finish \(destination.lastPathComponent)")
+        }
+
+        return Result(archiveURL: destination,
+                      fileCount: inner.fileCount,
+                      directoryCount: inner.directoryCount,
+                      skippedSymlinks: inner.skippedSymlinks,
+                      excludedJunk: inner.excludedJunk)
+    }
+
     /// Recursive walk: real directories only (symlinked dirs are reported and
     /// skipped), junk filtered, and the in-progress `.part` archive excluded.
     private static func collect(directory: URL, prefix: String, partURL: URL,
@@ -131,6 +204,7 @@ public enum Packer {
             let name = FileNameEncoding.nfc(child.lastPathComponent)
             let path = prefix + "/" + name
             if child.path == partURL.path { continue }
+            if child.path.hasPrefix(".dizun-inner-") { continue }
             if options.excludeMacJunk && isJunk(name) {
                 excludedJunk.append(path)
                 continue

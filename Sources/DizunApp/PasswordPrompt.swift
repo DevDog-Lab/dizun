@@ -28,7 +28,7 @@ enum PasswordPrompt {
             let alert = NSAlert()
             alert.alertStyle = .informational
             alert.messageText = "暗号化パスワードを設定"
-            alert.informativeText = "パスワードはどこにも保存されません。忘れると内容を取り出せません。"
+            alert.informativeText = "二重ZIPでファイル名・構成も隠されます。パスワードはどこにも保存されません。忘れると内容を取り出せません。"
             let stack = NSStackView(frame: NSRect(x: 0, y: 0, width: 280, height: 60))
             stack.orientation = .vertical
             stack.spacing = 8

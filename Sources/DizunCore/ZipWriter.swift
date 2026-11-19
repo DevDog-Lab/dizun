@@ -81,6 +81,10 @@ public final class ZipWriter {
         self.options = options
     }
 
+    /// Archive-level comment stored in the end record. DIZUN uses it to mark
+    /// nested (double-ZIP) archives so extraction can auto-unwrap them.
+    public var archiveComment: String?
+
     deinit { try? handle.close() }
 
     // MARK: - Public API
@@ -156,8 +160,10 @@ public final class ZipWriter {
         eocd += Zip.littleEndian16(needsZip64 ? 0xFFFF : UInt16(truncatingIfNeeded: records.count))
         eocd += Zip.littleEndian32(needsZip64 ? 0xFFFF_FFFF : UInt32(truncatingIfNeeded: directorySize))
         eocd += Zip.littleEndian32(needsZip64 ? 0xFFFF_FFFF : UInt32(truncatingIfNeeded: directoryOffset))
-        eocd += Zip.littleEndian16(0)               // comment length
+        let comment = Data((archiveComment ?? "").utf8)
+        eocd += Zip.littleEndian16(UInt16(comment.count))
         try write(Data(eocd))
+        try write(comment)
     }
 
     // MARK: - Entry writing

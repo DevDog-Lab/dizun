@@ -29,6 +29,8 @@ public final class ZipReader {
     public private(set) var entries: [ZipEntry] = []
     public let detectedEncoding: NameEncoding
     public let archiveSize: UInt64
+    /// Archive-level comment from the end record (nil when empty).
+    public let archiveComment: String?
 
     private let data: Data
     private let rawEntries: [RawEntry]
@@ -51,14 +53,15 @@ public final class ZipReader {
                 "archive exceeds the current in-memory reader cap (\(limits.maxArchiveBytes) bytes)")
         }
         let raw = try ZipReader.parseCentralDirectory(data, limits: limits)
-        self.rawEntries = raw
+        self.rawEntries = raw.entries
+        self.archiveComment = raw.comment
 
         // Archive-wide encoding for entries without the UTF-8 flag.
-        let undecided = raw.filter { entry in
+        let undecided = raw.entries.filter { entry in
             entry.utf8NameOverride == nil && (entry.flags & Zip.flagUTF8) == 0
         }
         self.detectedEncoding = FileNameEncoding.detect(undecided.map(\.nameBytes))
-        self.entries = raw.map { rawEntry in
+        self.entries = raw.entries.map { rawEntry in
             ZipReader.decode(rawEntry, encoding: detectedEncoding)
         }
     }
@@ -245,7 +248,8 @@ public final class ZipReader {
                         aesActualMethod: raw.aesActualMethod)
     }
 
-    private static func parseCentralDirectory(_ data: Data, limits: ExtractionLimits) throws -> [RawEntry] {
+    private static func parseCentralDirectory(_ data: Data, limits: ExtractionLimits)
+        throws -> (entries: [RawEntry], comment: String?) {
         guard data.count >= 22 else { throw DizunError.notAZip }
         let eocd = try findEndRecord(in: data)
 
@@ -261,6 +265,8 @@ public final class ZipReader {
         guard cursor.offset + commentLength == data.count else {
             throw DizunError.corrupt("trailing bytes after the ZIP comment")
         }
+        let commentBytes = try cursor.bytes(commentLength)
+        let comment = commentBytes.isEmpty ? nil : String(data: commentBytes, encoding: .utf8)
 
         // ZIP64: the classic record stores 0xFFFF/0xFFFFFFFF sentinels and the
         // real values live in the ZIP64 end record.
@@ -349,7 +355,7 @@ public final class ZipReader {
                                     aesActualMethod: aesActualMethod))
             offset = c.offset
         }
-        return entries
+        return (entries, comment)
     }
 
     /// Walk the extra fields: ZIP64 sizes/offset (0x0001), the Info-ZIP
