@@ -95,7 +95,7 @@ final class ArchivePreviewWindowController: NSObject, NSWindowDelegate {
         }
         let encrypted = entries.filter(\.isEncrypted)
         if !encrypted.isEmpty {
-            warnings.append("暗号化された項目: \(encrypted.count)件（このバージョンでは解凍できません）")
+            warnings.append("パスワード保護された項目: \(encrypted.count)件（解凍時に尋ねます）")
         }
         warningLabel.stringValue = warnings.joined(separator: "\n")
     }

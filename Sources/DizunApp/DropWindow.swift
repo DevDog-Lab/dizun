@@ -44,7 +44,21 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
             trackingMode: .selectOne, target: self, action: #selector(encodingChanged(_:)))
         encoding.segmentStyle = .texturedRounded
         encoding.selectedSegment = Settings.compressEncoding == .cp932 ? 1 : 0
-        let encodingRow = NSStackView(views: [encodingLabel, encoding])
+
+        // Encryption scheme, persisted; the password itself is asked per job.
+        let cryptoLabel = NSTextField(labelWithString: "暗号化:")
+        cryptoLabel.font = .systemFont(ofSize: 12)
+        let crypto = NSSegmentedControl(
+            labels: ["なし", "AES-256", "ZipCrypto（弱い）"],
+            trackingMode: .selectOne, target: self, action: #selector(encryptionChanged(_:)))
+        crypto.segmentStyle = .texturedRounded
+        switch Settings.compressEncryptionKind {
+        case .none: crypto.selectedSegment = 0
+        case .aes256: crypto.selectedSegment = 1
+        case .zipCrypto: crypto.selectedSegment = 2
+        }
+        let encodingRow = NSStackView(views: [encodingLabel, encoding,
+                                              NSStackView.spacerView, cryptoLabel, crypto])
         encodingRow.orientation = .horizontal
         encodingRow.spacing = 8
 
@@ -71,6 +85,23 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
 
     @objc private func encodingChanged(_ sender: NSSegmentedControl) {
         Settings.compressEncoding = sender.selectedSegment == 1 ? .cp932 : .utf8
+    }
+
+    @objc private func encryptionChanged(_ sender: NSSegmentedControl) {
+        switch sender.selectedSegment {
+        case 1: Settings.compressEncryptionKind = .aes256
+        case 2: Settings.compressEncryptionKind = .zipCrypto
+        default: Settings.compressEncryptionKind = .none
+        }
+    }
+}
+
+extension NSStackView {
+    /// A flexible spacer for stack rows (AppKit has no built-in one).
+    static var spacerView: NSView {
+        let view = NSView()
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return view
     }
 }
 

@@ -17,6 +17,9 @@ final class WorkCoordinator {
     /// window instead of extracting immediately (unless the user chose
     /// instant extraction in Settings).
     var openPreview: ((URL) -> Void)?
+    /// Password prompts, injected so the coordinator stays UI-free-ish.
+    /// `confirm == true` asks twice (new password). Always main-thread.
+    var requestPassword: ((_ title: String, _ confirm: Bool) -> String?)?
 
     /// Drop / open heuristic: only .zips → extract, anything else → compress.
     /// A lone ZIP is routed to the preview first when one is configured.
@@ -34,7 +37,26 @@ final class WorkCoordinator {
     }
 
     func extractAll(archives: [URL], forcedEncoding: NameEncoding? = nil,
+                    password: String? = nil,
                     completion: (() -> Void)? = nil) {
+        // Ask for the password up front — the engine refuses to touch the
+        // disk without one, and prompting before the panel starts keeps the
+        // retry clean.
+        var password = password
+        if password == nil {
+            for archive in archives {
+                guard let reader = try? ZipReader(url: archive) else { continue }
+                if reader.entries.contains(where: { $0.isEncrypted && !$0.isDirectory }) {
+                    guard let supplied = requestPassword?(
+                        "「\(archive.lastPathComponent)」はパスワードで保護されています", false) else {
+                        completion?()
+                        return
+                    }
+                    password = supplied
+                    break
+                }
+            }
+        }
         run(panelTitle: "解凍",
             panelLabel: archives.first?.lastPathComponent ?? "") { job in
             var revealed = false
@@ -46,6 +68,7 @@ final class WorkCoordinator {
                 do {
                     var options = Unpacker.Options()
                     options.forcedEncoding = forcedEncoding
+                    options.password = password
                     let result = try Unpacker.unpack(zipURL: archive,
                                                      options: options,
                                                      progress: { job.update($0) },
@@ -67,12 +90,33 @@ final class WorkCoordinator {
     }
 
     func compress(files: [URL], completion: (() -> Void)? = nil) {
+        // Encryption setting picks the scheme; the password is asked per job
+        // and never stored.
+        var encryption = ZipWriter.Encryption.none
+        switch Settings.compressEncryptionKind {
+        case .none:
+            break
+        case .aes256:
+            guard let password = requestPassword?("暗号化パスワードを設定（AES-256）", true) else {
+                completion?()
+                return
+            }
+            encryption = .aes256(password: password)
+        case .zipCrypto:
+            guard let password = requestPassword?(
+                "暗号化パスワードを設定（ZipCrypto: 旧方式のため保護は弱いです）", true) else {
+                completion?()
+                return
+            }
+            encryption = .zipCrypto(password: password)
+        }
         run(panelTitle: "圧縮",
             panelLabel: files.first?.lastPathComponent ?? "") { job in
             let destination = try Self.archiveDestination(for: files)
             job.update(destination.lastPathComponent)
             var options = Packer.Options()
             options.nameEncoding = Settings.compressEncoding
+            options.encryption = encryption
             let result = try Packer.pack(files, to: destination,
                                          options: options,
                                          progress: { job.update($0) },

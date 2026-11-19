@@ -12,6 +12,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = self
+        coordinator.requestPassword = { title, confirm in
+            MainActor.assumeIsolated {
+                if confirm {
+                    return PasswordPrompt.requestNew()
+                }
+                _ = title
+                return PasswordPrompt.ask(title: title)
+            }
+        }
         coordinator.openPreview = { [weak self] url in
             // One-shot launches (no droplet) quit when the preview's job ends;
             // with the droplet open the app stays.

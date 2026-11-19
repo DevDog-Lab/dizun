@@ -1,5 +1,24 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-19 — 第10回: パスワード付きZIP圧縮・解凍（AES-256 / ZipCrypto）
+
+ユーザー要件「圧縮時にパスワードを設定」に対し、SPEC §4どおりAES-256（既定・推奨）とZipCrypto（旧互換・脆弱）の選択制で実装。
+
+- **エンジン**（コミット `957c626`）:
+  - `WinZipAES`: PBKDF2-HMAC-SHA1(1000回)・AES-CTR(WinZip式LEカウンタ)・HMAC-SHA1認証タグ。鍵導出バッファの消去。検証子(2byte)+HMACによる誤パスワード検出
+  - `ZipCryptoCipher`: PKWARE伝統型。チェックバイトはCRC上位（data descriptor時はDOS時刻上位へフォールバック）
+  - Writer: 方式99+0x9901 extra（両ヘッダ）、ストリーミング経路の暗号化、ZipCryptoのCRC事前計算パス、版数51
+  - Reader: 両方式復号、`passwordRequired`/`wrongPassword`の分離、AE-2はCRC省略(HMACで保証)
+  - Unpacker: パスワード無しを**ディスクtouch前**に拒否（リトライ時に残骸を出さない）
+  - 膨張比上限200→1000へ緩和: 逆方向交叉検証で225:1の正当な高圧縮ファイルの誤拒否を発見。DEFLAVE理論上限≈1032:1に合わせ、絶対容量キャップが爆弾対策の主体
+- **交叉検証（7-Zip 26.00 / Info-ZIP unzip）双方向**:
+  - DIZUN作成AES-256/ZipCrypto ZIP → 7zz・unzipがパスワード付きで完全復号・SHA-256一致
+  - 7zz作成AES-256/ZipCrypto ZIP → DIZUNが完全復号・SHA-256一致
+- **CLI**: `pack --password [--zipcrypto]`（二重入力・エコーOFF。パスワードはargv/ログに出さない）、`unpack` はパスワード必須時に自動プロンプト
+- **アプリUI**（本コミット）: ドロップレット窓に暗号化方式選択（なし/AES-256/ZipCrypto=弱い明記・永続化）、圧縮時にパスワード二重入力プロンプト（保存されない）、解凍時は保護アーカイブを検出したら事前プロンプト、プレビューの警告文更新
+- 検証: XCTest/selftest 17/17（暗号化シナリオ2件追加）、警告0ビルド
+- **未検証**: アプリUIのパスワードプロンプト実機操作（ユーザー確認待ち）。Windows実機での暗号化ZIP開封（ゲートD。Windows 11 ExplorerはAES対応済みという報告があるが未確認）
+
 ## 2026-11-19 — 第9回: Windows互換性のMac側多面的検証（ゲートD前の信頼性評価）
 
 Windows実機検証（ゲートD）は当面不可のため、Mac上で可能な独立実装による交叉検証を実施。

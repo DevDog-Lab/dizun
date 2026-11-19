@@ -20,4 +20,39 @@ enum Settings {
         get { defaults.string(forKey: "compressEncoding") == "cp932" ? .cp932 : .utf8 }
         set { defaults.set(newValue == .cp932 ? "cp932" : "utf8", forKey: "compressEncoding") }
     }
+
+    /// Encryption used when creating ZIPs. The password itself is never
+    /// persisted — only the chosen scheme; it is asked per job.
+    static var compressEncryptionKind: EncryptionKind {
+        get {
+            switch defaults.string(forKey: "compressEncryption") {
+            case "aes256": return .aes256
+            case "zipcrypto": return .zipCrypto
+            default: return .none
+            }
+        }
+        set {
+            let raw: String
+            switch newValue {
+            case .none: raw = "none"
+            case .aes256: raw = "aes256"
+            case .zipCrypto: raw = "zipcrypto"
+            }
+            defaults.set(raw, forKey: "compressEncryption")
+        }
+    }
+
+    enum EncryptionKind {
+        case none
+        case aes256
+        case zipCrypto
+
+        var label: String {
+            switch self {
+            case .none: return "暗号化なし"
+            case .aes256: return "AES-256"
+            case .zipCrypto: return "ZipCrypto（旧方式・弱い）"
+            }
+        }
+    }
 }
