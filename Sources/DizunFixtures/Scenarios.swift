@@ -716,5 +716,11 @@ public enum Scenarios {
         ("unpackJunkSkipped", unpackJunkSkipped),
         ("encryptedAESRoundTrip", encryptedAESRoundTrip),
         ("encryptedZipCryptoRoundTrip", encryptedZipCryptoRoundTrip),
+        ("imageOptimizePNG", ImageScenarios.pngLossless),
+        ("imageOptimizeJPEGStrip", ImageScenarios.jpegMetadataStripped),
+        ("imageOptimizeOrientationBake", ImageScenarios.jpegOrientationBaked),
+        ("imageOptimizeWebResize", ImageScenarios.webResize),
+        ("imageOptimizeBackup", ImageScenarios.backupKeepsOriginal),
+        ("imageOptimizeNoGrow", ImageScenarios.noGrowNoTouch),
     ]
 }

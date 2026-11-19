@@ -126,6 +126,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         coordinator.extractAll(archives: urls) { NSApp.terminate(nil) }
     }
+
+    /// 画像最適化 — in-place shrink, original to Trash per the setting.
+    @objc func optimizeImagesService(_ pboard: NSPasteboard, userData: String,
+                                     error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard let urls = pboard.fileURLs else {
+            error?.pointee = "no files on the pasteboard" as NSString
+            return
+        }
+        coordinator.optimizeImages(urls) { NSApp.terminate(nil) }
+    }
 }
 
 extension NSPasteboard {

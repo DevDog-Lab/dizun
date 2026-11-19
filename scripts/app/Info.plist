@@ -114,6 +114,23 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
+				<string>DIZUNで画像を最適化</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>optimizeImagesService</string>
+			<key>NSPortName</key>
+			<string>Dizun</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.image</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
 				<string>DIZUNで解凍</string>
 			</dict>
 			<key>NSMessage</key>

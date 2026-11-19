@@ -18,6 +18,10 @@ DIZUNCore の設計は、監査済みの以下のOSSプロジェクトを**設�
 - **libarchive** (BSD-2-Clause系, SHA `432ab464725aa99c53de7572979bd9bbbf382ed1`)
   - 同梱なし。次フェーズの多形式対応検討時のみ再監査のうえ、`COPYING` とファイル別ライセンスを収録してから配布する。
 
+## システムライブラリのリンク（ソース同梱なし）
+
+- **zlib**（AppleがmacOS/SDKに同梱、zlib license © Jean-loup Gailly, Mark Adler）: PNG再圧縮のレベル制御のため `DizunImage` が `/usr/lib/libz.dylib` をリンク。ソースの複製・改変は行っておらず出自として記録。
+
 ## 今後のコード取り込み時の規則
 
 上流からコードを複製・移植する場合、必ず:

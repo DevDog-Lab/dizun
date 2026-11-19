@@ -42,6 +42,23 @@ enum Settings {
         }
     }
 
+    /// Long-edge cap for the web resize on image optimization (nil = none).
+    static var optimizeMaxDimension: Int? {
+        get {
+            let raw = defaults.integer(forKey: "optimizeMaxDimension")
+            return raw > 0 ? raw : nil
+        }
+        set {
+            defaults.set(newValue ?? 0, forKey: "optimizeMaxDimension")
+        }
+    }
+
+    /// Keep the pre-optimization original in the Trash (recommended).
+    static var optimizeBackupToTrash: Bool {
+        get { defaults.object(forKey: "optimizeBackupToTrash") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "optimizeBackupToTrash") }
+    }
+
     enum EncryptionKind {
         case none
         case aes256

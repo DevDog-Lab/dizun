@@ -1,5 +1,6 @@
 import AppKit
 import DizunCore
+import DizunImage
 import Foundation
 
 /// Runs compression/extraction jobs on a background queue and reports to the
@@ -24,6 +25,11 @@ final class WorkCoordinator {
     /// Drop / open heuristic: only .zips → extract, anything else → compress.
     /// A lone ZIP is routed to the preview first when one is configured.
     func performAutomatic(urls: [URL], completion: @escaping () -> Void) {
+        let images = urls.filter(ImageOptimizer.isSupported)
+        if images.count == urls.count, !images.isEmpty {
+            optimizeImages(images, completion: completion)
+            return
+        }
         let zips = urls.filter { $0.pathExtension.lowercased() == "zip" }
         if zips.count == urls.count, !zips.isEmpty {
             if zips.count == 1, !Settings.instantExtract, let openPreview {
@@ -95,6 +101,49 @@ final class WorkCoordinator {
         case fromSettings
         case plain
         case encrypted
+    }
+
+    /// Image-only drops: optimize in place (see ImageOptimizer). The
+    /// original goes to the Trash first when the setting says so.
+    func optimizeImages(_ urls: [URL], completion: (() -> Void)? = nil) {
+        let targets = urls.filter(ImageOptimizer.isSupported)
+        guard !targets.isEmpty else {
+            completion?()
+            return
+        }
+        run(panelTitle: "画像最適化",
+            panelLabel: targets.first?.lastPathComponent ?? "") { job in
+            var totalBefore = 0
+            var totalAfter = 0
+            var shrunk = 0
+            for (index, url) in targets.enumerated() {
+                if job.isCancelled { throw DizunError.cancelled }
+                job.update("（\(index + 1)/\(targets.count)）\(url.lastPathComponent)")
+                var options = ImageOptimizer.Options()
+                options.maxDimension = Settings.optimizeMaxDimension
+                let backup: ((URL) throws -> Void)? = Settings.optimizeBackupToTrash ? { original in
+                    var failure: Error?
+                    DispatchQueue.main.sync {
+                        do {
+                            try NSWorkspace.shared.recycle([original], completionHandler: nil)
+                        } catch {
+                            failure = error
+                        }
+                    }
+                    if let failure { throw failure }
+                } : nil
+                let result = try ImageOptimizer.optimize(url, options: options, backup: backup)
+                totalBefore += result.originalSize
+                totalAfter += result.skipped ? result.originalSize : result.optimizedSize
+                if !result.skipped { shrunk += 1 }
+            }
+            let saved = max(totalBefore - totalAfter, 0)
+            let savedText = ByteCountFormatter.string(fromByteCount: Int64(saved), countStyle: .file)
+            job.notice("\(shrunk)/\(targets.count)枚を縮小（\(savedText) 節約）")
+            job.reveal([])
+        } completion: {
+            completion?()
+        }
     }
 
     func compress(files: [URL], mode: CompressMode = .fromSettings,

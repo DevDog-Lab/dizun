@@ -1,5 +1,6 @@
 import DizunCore
 import DizunFixtures
+import DizunImage
 import Foundation
 
 import Darwin
@@ -43,6 +44,7 @@ func usage() -> Never {
       dizun pack <source>... -o <output.zip> [--cp932]
       dizun unpack <archive.zip> [-o <dir>] [--encoding auto|utf8|cp932]
       dizun list <archive.zip> [--encoding utf8|cp932]
+      dizun optimize <image>... [--max-dimension <px>]
       dizun selftest
       dizun --version
 
@@ -50,6 +52,8 @@ func usage() -> Never {
              Windows tools). macOS junk files are excluded.
     unpack   Extract without ever overwriting existing files.
     list     Show entries (name, method, sizes, UTF-8 flag).
+    optimize Shrink images in place (lossless; metadata removed, optional
+             web resize). Files that would not shrink are left untouched.
     selftest Run the engine verification scenarios.
     """)
     exit(0)
@@ -182,6 +186,51 @@ case "unpack":
         }
     } catch {
         fail("unpack failed: \(error)")
+    }
+case "optimize":
+    var files: [URL] = []
+    var maxDimension: Int?
+    var index = 0
+    while index < arguments.count {
+        let arg = arguments[index]
+        if arg == "--max-dimension", index + 1 < arguments.count {
+            index += 1
+            guard let px = Int(arguments[index]), px > 0 else {
+                fail("optimize: --max-dimension needs a positive pixel count")
+            }
+            maxDimension = px
+        } else {
+            files.append(URL(fileURLWithPath: arg))
+        }
+        index += 1
+    }
+    guard !files.isEmpty else { fail("optimize: no files given") }
+    var totalBefore = 0
+    var totalAfter = 0
+    var savedFiles = 0
+    for file in files {
+        guard ImageOptimizer.isSupported(file) else {
+            print("skip (unsupported): \(file.lastPathComponent)")
+            continue
+        }
+        do {
+            let result = try ImageOptimizer.optimize(file, options: .init(maxDimension: maxDimension))
+            if result.skipped {
+                print("keep  \(file.lastPathComponent) (\(result.originalSize) bytes)")
+            } else {
+                savedFiles += 1
+                let percent = 100 * result.savedBytes / max(result.originalSize, 1)
+                print("done  \(file.lastPathComponent): \(result.originalSize) → \(result.optimizedSize) bytes (\(percent)% smaller\(result.reencoded ? ", re-encoded" : ""))")
+            }
+            totalBefore += result.originalSize
+            totalAfter += result.skipped ? result.originalSize : result.optimizedSize
+        } catch {
+            fail("optimize failed for \(file.lastPathComponent): \(error)")
+        }
+    }
+    if totalBefore > 0 {
+        let percent = 100 * (totalBefore - totalAfter) / totalBefore
+        print("total: \(savedFiles) shrunk, \(totalBefore) → \(totalAfter) bytes (\(percent)% smaller)")
     }
 case "list":
     var input: URL?

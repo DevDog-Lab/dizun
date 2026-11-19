@@ -62,7 +62,29 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
         encodingRow.orientation = .horizontal
         encodingRow.spacing = 8
 
-        let stack = NSStackView(views: [title, subtitle, drop, encodingRow])
+        // Image optimization: web resize cap and Trash backup for originals.
+        let resizeLabel = NSTextField(labelWithString: "画像最適化:")
+        resizeLabel.font = .systemFont(ofSize: 12)
+        let resize = NSSegmentedControl(
+            labels: ["リサイズなし", "1280px", "1920px", "2560px"],
+            trackingMode: .selectOne, target: self, action: #selector(resizeChanged(_:)))
+        resize.segmentStyle = .texturedRounded
+        let caps: [Int?] = [nil, 1280, 1920, 2560]
+        if let cap = Settings.optimizeMaxDimension,
+           let index = [1280, 1920, 2560].firstIndex(of: cap) {
+            resize.selectedSegment = index + 1
+        } else {
+            resize.selectedSegment = 0
+        }
+        _ = caps
+        let backupToggle = NSButton(checkboxWithTitle: "元画像をゴミ箱へ",
+                                    target: self, action: #selector(backupChanged(_:)))
+        backupToggle.state = Settings.optimizeBackupToTrash ? .on : .off
+        let optimizeRow = NSStackView(views: [resizeLabel, resize, NSStackView.spacerView, backupToggle])
+        optimizeRow.orientation = .horizontal
+        optimizeRow.spacing = 8
+
+        let stack = NSStackView(views: [title, subtitle, drop, encodingRow, optimizeRow])
         stack.orientation = .vertical
         stack.spacing = 12
         stack.alignment = .centerX
@@ -85,6 +107,15 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
 
     @objc private func encodingChanged(_ sender: NSSegmentedControl) {
         Settings.compressEncoding = sender.selectedSegment == 1 ? .cp932 : .utf8
+    }
+
+    @objc private func resizeChanged(_ sender: NSSegmentedControl) {
+        let caps: [Int?] = [nil, 1280, 1920, 2560]
+        Settings.optimizeMaxDimension = caps[sender.selectedSegment]
+    }
+
+    @objc private func backupChanged(_ sender: NSButton) {
+        Settings.optimizeBackupToTrash = sender.state == .on
     }
 
     @objc private func encryptionChanged(_ sender: NSSegmentedControl) {

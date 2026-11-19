@@ -23,4 +23,10 @@ final class DizunCoreTests: XCTestCase {
     func testUnpackJunkSkipped() throws { try Scenarios.unpackJunkSkipped() }
     func testEncryptedAESRoundTrip() throws { try Scenarios.encryptedAESRoundTrip() }
     func testEncryptedZipCryptoRoundTrip() throws { try Scenarios.encryptedZipCryptoRoundTrip() }
+    func testImageOptimizePNG() throws { try ImageScenarios.pngLossless() }
+    func testImageOptimizeJPEGStrip() throws { try ImageScenarios.jpegMetadataStripped() }
+    func testImageOptimizeOrientationBake() throws { try ImageScenarios.jpegOrientationBaked() }
+    func testImageOptimizeWebResize() throws { try ImageScenarios.webResize() }
+    func testImageOptimizeBackup() throws { try ImageScenarios.backupKeepsOriginal() }
+    func testImageOptimizeNoGrow() throws { try ImageScenarios.noGrowNoTouch() }
 }
