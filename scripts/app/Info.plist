@@ -47,6 +47,23 @@
 				<string>com.pkware.zip-archive</string>
 			</array>
 		</dict>
+		<!-- Droplet claim: the Dock only accepts drops on a *non-running*
+		     pinned icon for types the app declares, so compression targets
+		     need the generic item type (Keka-style). Viewer/Alternate keeps
+		     DIZUN out of default-handler slots for ordinary files. -->
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Any file or folder (compress)</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.item</string>
+				<string>public.folder</string>
+			</array>
+		</dict>
 	</array>
 	<!-- Finder right-click Services. NSSendFileTypes (UTI-based) is required
 	     for Finder to consider the service applicable to a file selection;

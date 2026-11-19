@@ -1,5 +1,14 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-19 — 第6回: 未起動Dockピン留めアイコンがZIP以外のドロップを受けない問題の修正
+
+- ユーザー報告: 手動テスト4（Dockピン留め・閉じた状態からのドロップ）が失敗。クラッシュレポート無し。
+- 原因: **未起動のDockタイルは、アプリが宣言したUTIのみ受け付ける**（実行中タイルは無条件）。DIZUNは `public.zip-archive` しか宣言しておらず、フォルダ/通常ファイルのドロップはDockの段階で拒否されていた（テスト2・3は実行中だったため問題なし）。
+- 対策: `CFBundleDocumentTypes` にKeka式のドロップレット宣言を追加（`public.item` + `public.folder`、Role=Viewer / Rank=Alternate — 通常ファイルの既定ハンドラも主張しない）。zip-porterも同様にZIPのみ宣言しており、Dockピンでの汎用ドロップは持たない設計。
+- 再ビルド・`lsregister -f`・`pbs -update`。LS dumpで `claimed UTIs: public.zip-archive, public.item, com.pkware.zip-archive, public.folder` を確認。
+- 注意: 開発中に `build/Dizun.app` を作り直すとDockピンの参照が無効化されることがある。再ピン留め（アイコンをDockから外し、新ビルドを起動してから「Dockに保持」）で復旧。
+- コミット: （本コミット）
+
 ## 2026-11-19 — 第5回: Dockアイコンへのドラッグ&ドロップ対応
 
 - ユーザー実機確認でゲートC達成を確認（右クリックサービス表示・動作）。追加要件としてDockアイコンのドロップ対応を実装。
