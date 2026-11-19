@@ -7,18 +7,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var droplet: DropletWindowController?
     /// Files handed over before applicationDidFinishLaunching.
     private var pending: [URL] = []
-    /// True when launched to do one job (open/service) — quit when it ends.
-    private var oneShot = false
+    /// Set when the launch sequence finished; files after this are live drops.
+    private var launched = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = self
+        launched = true
         if pending.isEmpty {
             droplet = DropletWindowController(coordinator: coordinator)
             droplet?.show()
         } else {
             let urls = pending
             pending = []
-            runOneShot(urls)
+            runOneShot(urls, quitWhenDone: true)
         }
     }
 
@@ -36,13 +37,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func enqueue(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
-        if NSApp.isActive || droplet != nil {
-            // Already running (droplet mode): queue without quitting.
-            runOneShot(urls, quitWhenDone: false)
-        } else {
+        guard launched else {
+            // Launch-with-files (Dock drop / double-click on a pinned app):
+            // buffered, then run once the launch sequence completes.
             pending.append(contentsOf: urls)
-            oneShot = true
+            return
         }
+        // Live drop while running: stay only when the user keeps a droplet
+        // window open; a one-shot launch does its job and leaves (zip-porter
+        // semantics — the Dock icon survives only if pinned).
+        runOneShot(urls, quitWhenDone: droplet == nil)
     }
 
     private func runOneShot(_ urls: [URL], quitWhenDone: Bool = true) {
@@ -61,7 +65,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             error?.pointee = "no files on the pasteboard" as NSString
             return
         }
-        oneShot = true
         coordinator.compress(files: urls) { NSApp.terminate(nil) }
     }
 
@@ -71,7 +74,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             error?.pointee = "no files on the pasteboard" as NSString
             return
         }
-        oneShot = true
         coordinator.extractAll(archives: urls) { NSApp.terminate(nil) }
     }
 }

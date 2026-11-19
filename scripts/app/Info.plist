@@ -24,8 +24,10 @@
 	<string>NSApplication</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<!-- Regular app: the Dock icon is a drag-and-drop target for
+	     compression/extraction (pinned or while running). -->
 	<key>LSUIElement</key>
-	<true/>
+	<false/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<!-- ZIP handling: visible in 開く/Open With. Rank Alternate — DIZUN never
