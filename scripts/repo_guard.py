@@ -7,6 +7,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_SCAN = 5 * 1024 * 1024
+# Brand assets the user provided and a human reviewed before commit (the app
+# icon, 2026-11-19; inspected visually and dimension-checked — image data
+# only). This is a narrow allowlist, NOT a general binary exemption.
+APPROVED_BINARY_ASSET = re.compile(r'(^|/)Assets/[^/]+\.(?:png|icns)$', re.I)
 NAME_BLOCK = re.compile(r'(^|/)(\.env(?:\..*)?|id_rsa(?:\..*)?|id_ed25519(?:\..*)?|[^/]*\.(?:pem|key|p8|p12|pfx|kdbx|mobileprovision)|credentials\.json|service-account[^/]*\.json)$', re.I)
 PATTERNS = [
     ('private key', re.compile(rb'-----BEGIN (?:OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----')),
@@ -61,9 +65,10 @@ def check(items):
             issues.append((path, 'file exceeds safe scanner size; manual review required'))
             continue
         if b'\x00' in data[:4096]:
-            # Binary files could hide secrets; block until an explicit review instead of falsely reporting clean.
-            issues.append((path, 'binary content requires explicit review / removal'))
-            continue
+            if not APPROVED_BINARY_ASSET.search(path.split(' [history]')[0]):
+                # Binary files could hide secrets; block until an explicit review instead of falsely reporting clean.
+                issues.append((path, 'binary content requires explicit review / removal'))
+                continue
         for title, pattern in PATTERNS:
             if pattern.search(data):
                 issues.append((path, title))

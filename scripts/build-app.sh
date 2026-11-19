@@ -13,6 +13,9 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/DizunApp "$APP/Contents/MacOS/DizunApp"
 cp scripts/app/Info.plist "$APP/Contents/Info.plist"
+if [ -f Assets/AppIcon.icns ]; then
+  cp Assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+fi
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 codesign --force --sign - "$APP" >/dev/null 2>&1 \
   || codesign --force --sign - "$APP"
