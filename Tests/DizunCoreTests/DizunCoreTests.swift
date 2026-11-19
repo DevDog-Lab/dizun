@@ -29,4 +29,6 @@ final class DizunCoreTests: XCTestCase {
     func testImageOptimizeWebResize() throws { try ImageScenarios.webResize() }
     func testImageOptimizeBackup() throws { try ImageScenarios.backupKeepsOriginal() }
     func testImageOptimizeNoGrow() throws { try ImageScenarios.noGrowNoTouch() }
+    func testImageOptimizeTargetSize() throws { try ImageScenarios.jpegTargetSize() }
+    func testImageOptimizeCustomEdge() throws { try ImageScenarios.customEdge() }
 }

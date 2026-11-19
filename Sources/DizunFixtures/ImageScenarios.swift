@@ -239,6 +239,43 @@ enum ImageScenarios {
         try assert(longEdge(small) == 300, "small image must not be upscaled")
     }
 
+    /// Target size (JPEG): quality searched downward until the output fits.
+    static func jpegTargetSize() throws {
+        let work = tempDir("target")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let url = work.appendingPathComponent("photo.jpg")
+        try writeJPEG(makeNoiseImage(width: 1600, height: 1200), to: url, properties: [:])
+        let originalSize = try Data(contentsOf: url).count
+
+        // A reachable target must be honored.
+        let target = originalSize / 2
+        let result = try ImageOptimizer.optimize(url, options: .init(targetByteSize: target))
+        try assert(!result.skipped, "target pass should shrink")
+        try assert(result.reencoded, "target pass must re-encode")
+        try assert(result.optimizedSize <= target,
+                   "result \(result.optimizedSize) exceeds target \(target)")
+
+        // An unreachable target (floor quality) still returns the best
+        // effort when smaller than the original — never a bigger file.
+        let url2 = work.appendingPathComponent("photo2.jpg")
+        try writeJPEG(makeNoiseImage(width: 800, height: 600), to: url2, properties: [:])
+        let size2 = try Data(contentsOf: url2).count
+        let result2 = try ImageOptimizer.optimize(url2, options: .init(targetByteSize: 1024))
+        if !result2.skipped {
+            try assert(result2.optimizedSize < size2, "unreachable target returned a bigger file")
+        }
+    }
+
+    /// A custom (non-preset) long-edge cap is honored exactly.
+    static func customEdge() throws {
+        let work = tempDir("custom")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let url = work.appendingPathComponent("img.png")
+        try writePNG(makeNoiseImage(width: 2500, height: 1400), to: url)
+        _ = try ImageOptimizer.optimize(url, options: .init(maxDimension: 1111))
+        try assert(longEdge(url) == 1111, "long edge should be 1111, is \(longEdge(url))")
+    }
+
     /// The backup closure runs before replacement and keeps the original.
     static func backupKeepsOriginal() throws {
         let work = tempDir("backup")

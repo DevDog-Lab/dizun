@@ -62,25 +62,25 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
         encodingRow.orientation = .horizontal
         encodingRow.spacing = 8
 
-        // Image optimization: web resize cap and Trash backup for originals.
+        // Image optimization: custom long-edge cap, JPEG target size, and
+        // Trash backup for originals.
         let resizeLabel = NSTextField(labelWithString: "画像最適化:")
         resizeLabel.font = .systemFont(ofSize: 12)
-        let resize = NSSegmentedControl(
-            labels: ["リサイズなし", "1280px", "1920px", "2560px"],
-            trackingMode: .selectOne, target: self, action: #selector(resizeChanged(_:)))
-        resize.segmentStyle = .texturedRounded
-        let caps: [Int?] = [nil, 1280, 1920, 2560]
-        if let cap = Settings.optimizeMaxDimension,
-           let index = [1280, 1920, 2560].firstIndex(of: cap) {
-            resize.selectedSegment = index + 1
-        } else {
-            resize.selectedSegment = 0
-        }
-        _ = caps
+        let edgeField = numberField(placeholder: "長辺px 任意")
+        edgeField.stringValue = Settings.optimizeMaxDimension.map(String.init) ?? ""
+        edgeField.target = self
+        edgeField.action = #selector(edgeChanged(_:))
+        let targetLabel = NSTextField(labelWithString: "目標")
+        targetLabel.font = .systemFont(ofSize: 12)
+        let targetField = numberField(placeholder: "KB以下")
+        targetField.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
+        targetField.target = self
+        targetField.action = #selector(targetChanged(_:))
         let backupToggle = NSButton(checkboxWithTitle: "元画像をゴミ箱へ",
                                     target: self, action: #selector(backupChanged(_:)))
         backupToggle.state = Settings.optimizeBackupToTrash ? .on : .off
-        let optimizeRow = NSStackView(views: [resizeLabel, resize, NSStackView.spacerView, backupToggle])
+        let optimizeRow = NSStackView(views: [resizeLabel, edgeField, targetLabel, targetField,
+                                              NSStackView.spacerView, backupToggle])
         optimizeRow.orientation = .horizontal
         optimizeRow.spacing = 8
 
@@ -109,9 +109,23 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
         Settings.compressEncoding = sender.selectedSegment == 1 ? .cp932 : .utf8
     }
 
-    @objc private func resizeChanged(_ sender: NSSegmentedControl) {
-        let caps: [Int?] = [nil, 1280, 1920, 2560]
-        Settings.optimizeMaxDimension = caps[sender.selectedSegment]
+    @objc private func edgeChanged(_ sender: NSTextField) {
+        Settings.optimizeMaxDimension = Int(sender.stringValue.trimmingCharacters(in: .whitespaces))
+    }
+
+    @objc private func targetChanged(_ sender: NSTextField) {
+        Settings.optimizeTargetKB = Int(sender.stringValue.trimmingCharacters(in: .whitespaces))
+    }
+
+    private func numberField(placeholder: String) -> NSTextField {
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 110, height: 24))
+        field.placeholderString = placeholder
+        field.font = .systemFont(ofSize: 12)
+        field.bezelStyle = .roundedBezel
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        field.formatter = formatter
+        return field
     }
 
     @objc private func backupChanged(_ sender: NSButton) {

@@ -53,6 +53,17 @@ enum Settings {
         }
     }
 
+    /// Target file size (KB) for JPEG optimization; nil = none.
+    static var optimizeTargetKB: Int? {
+        get {
+            let raw = defaults.integer(forKey: "optimizeTargetKB")
+            return raw > 0 ? raw : nil
+        }
+        set {
+            defaults.set(newValue ?? 0, forKey: "optimizeTargetKB")
+        }
+    }
+
     /// Keep the pre-optimization original in the Trash (recommended).
     static var optimizeBackupToTrash: Bool {
         get { defaults.object(forKey: "optimizeBackupToTrash") as? Bool ?? true }

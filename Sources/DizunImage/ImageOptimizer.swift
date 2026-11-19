@@ -23,15 +23,20 @@ public enum ImageOptimizer {
     public struct Options: Sendable {
         /// Long-edge pixel cap for the web-oriented resize. nil = no resize.
         public var maxDimension: Int?
+        /// Target file size in bytes (JPEG only): the encoder searches
+        /// quality levels downward until the output fits (best effort —
+        /// never below a visual floor, never bigger than the default pass).
+        public var targetByteSize: Int?
         /// Remove every metadata segment (EXIF incl. GPS, XMP, IPTC,
         /// comments). Color profiles survive; orientation is baked in.
         public var removeMetadata = true
         /// JPEG encode quality for the lossy paths (resize / orientation
         /// bake). 0.8 is visually transparent for web use.
         public var jpegQuality: Double = 0.8
-        public init(maxDimension: Int? = nil, removeMetadata: Bool = true,
-                    jpegQuality: Double = 0.8) {
+        public init(maxDimension: Int? = nil, targetByteSize: Int? = nil,
+                    removeMetadata: Bool = true, jpegQuality: Double = 0.8) {
             self.maxDimension = maxDimension
+            self.targetByteSize = targetByteSize
             self.removeMetadata = removeMetadata
             self.jpegQuality = jpegQuality
         }
@@ -91,19 +96,35 @@ public enum ImageOptimizer {
         }
         try verifyDecodable(output, url: url)
 
-        let temp = url.deletingLastPathComponent()
-            .appendingPathComponent(".dizun-opt-\(UUID().uuidString).tmp")
+        // Swap with a rollback path: the original is parked (not deleted)
+        // until the replacement has actually landed, so no ordering or
+        // failure can ever destroy it. A `backup` closure typically moves
+        // the original to the Trash beforehand.
+        let folder = url.deletingLastPathComponent()
+        let tempNew = folder.appendingPathComponent(".dizun-opt-\(UUID().uuidString).new")
+        let tempOld = folder.appendingPathComponent(".dizun-opt-\(UUID().uuidString).old")
         do {
-            try output.write(to: temp)
+            try output.write(to: tempNew)
             if let backup { try backup(url) }
-            // The backup may have moved the original away (Trash); when it
-            // did not, drop it here — the verified replacement is on disk.
+            var parkedOriginal = false
             if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
+                try FileManager.default.moveItem(at: url, to: tempOld)
+                parkedOriginal = true
             }
-            try FileManager.default.moveItem(at: temp, to: url)
+            do {
+                try FileManager.default.moveItem(at: tempNew, to: url)
+            } catch {
+                if parkedOriginal {
+                    try? FileManager.default.moveItem(at: tempOld, to: url)
+                }
+                throw error
+            }
+            if parkedOriginal {
+                try FileManager.default.removeItem(at: tempOld)
+            }
         } catch {
-            try? FileManager.default.removeItem(at: temp)
+            try? FileManager.default.removeItem(at: tempNew)
+            try? FileManager.default.removeItem(at: tempOld)
             throw Failure.io("置き換えに失敗: \(url.lastPathComponent)")
         }
         return Result(url: url, originalSize: originalSize,
@@ -226,7 +247,8 @@ public enum ImageOptimizer {
         // both take the re-encode path.
         let orientation = exifOrientationSegment(in: data)
         let needsResize = options.maxDimension.map { jpgLongEdge(data) > $0 } ?? false
-        if orientation != nil || needsResize {
+        let needsTarget = options.targetByteSize.map { data.count > $0 } ?? false
+        if orientation != nil || needsResize || needsTarget {
             let cap = needsResize ? options.maxDimension : nil
             if let rebuilt = reencode(url: url, maxDimension: cap, options: options),
                rebuilt.count < data.count,
@@ -352,7 +374,9 @@ public enum ImageOptimizer {
     // MARK: - Shared re-encode (resize / orientation bake)
 
     /// Decode-and-reencode with ImageIO: bakes orientation, downscales to
-    /// the long-edge cap (never upscales), writes no metadata at all.
+    /// the long-edge cap (never upscales), writes no metadata at all. For
+    /// JPEG with a target size, quality levels are searched downward until
+    /// the output fits (best effort, floor 0.3).
     static func reencode(url: URL, maxDimension: Int?, options: Options) -> Data? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
             return nil
@@ -368,15 +392,31 @@ public enum ImageOptimizer {
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary) else {
             return nil
         }
-        let isPNG = url.pathExtension.lowercased() == "png"
+        if url.pathExtension.lowercased() == "png" {
+            return encode(image, type: .png, quality: nil)
+        }
+        guard let target = options.targetByteSize else {
+            return encode(image, type: .jpeg, quality: options.jpegQuality)
+        }
+        // Search downward from the default quality; keep the best attempt.
+        var best: Data?
+        for quality in [options.jpegQuality, 0.7, 0.6, 0.5, 0.45, 0.4, 0.35, 0.3] {
+            guard let attempt = encode(image, type: .jpeg, quality: quality) else { continue }
+            if attempt.count <= target { return attempt }
+            if best == nil || attempt.count < best!.count { best = attempt }
+        }
+        return best
+    }
+
+    static func encode(_ image: CGImage, type: UTType, quality: Double?) -> Data? {
         let output = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
-            output, (isPNG ? UTType.png : UTType.jpeg).identifier as CFString, 1, nil) else {
+            output, type.identifier as CFString, 1, nil) else {
             return nil
         }
         var properties: [CFString: Any] = [:]
-        if !isPNG {
-            properties[kCGImageDestinationLossyCompressionQuality] = options.jpegQuality
+        if let quality {
+            properties[kCGImageDestinationLossyCompressionQuality] = quality
         }
         CGImageDestinationAddImage(destination, image, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return nil }

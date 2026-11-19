@@ -722,5 +722,7 @@ public enum Scenarios {
         ("imageOptimizeWebResize", ImageScenarios.webResize),
         ("imageOptimizeBackup", ImageScenarios.backupKeepsOriginal),
         ("imageOptimizeNoGrow", ImageScenarios.noGrowNoTouch),
+        ("imageOptimizeTargetSize", ImageScenarios.jpegTargetSize),
+        ("imageOptimizeCustomEdge", ImageScenarios.customEdge),
     ]
 }

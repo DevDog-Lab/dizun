@@ -121,29 +121,42 @@ final class WorkCoordinator {
                 job.update("（\(index + 1)/\(targets.count)）\(url.lastPathComponent)")
                 var options = ImageOptimizer.Options()
                 options.maxDimension = Settings.optimizeMaxDimension
-                let backup: ((URL) throws -> Void)? = Settings.optimizeBackupToTrash ? { original in
-                    var failure: Error?
-                    DispatchQueue.main.sync {
-                        do {
-                            try NSWorkspace.shared.recycle([original], completionHandler: nil)
-                        } catch {
-                            failure = error
-                        }
-                    }
-                    if let failure { throw failure }
-                } : nil
+                options.targetByteSize = Settings.optimizeTargetKB.map { $0 * 1024 }
+                let backup: ((URL) throws -> Void)? = Settings.optimizeBackupToTrash
+                    ? Self.moveToTrash : nil
                 let result = try ImageOptimizer.optimize(url, options: options, backup: backup)
                 totalBefore += result.originalSize
                 totalAfter += result.skipped ? result.originalSize : result.optimizedSize
                 if !result.skipped { shrunk += 1 }
             }
+            if shrunk == 0 {
+                job.info("縮小できませんでした（\(targets.count)枚）。すでに最適化されているか、目標サイズに対して画像が小さい可能性があります。")
+            }
             let saved = max(totalBefore - totalAfter, 0)
             let savedText = ByteCountFormatter.string(fromByteCount: Int64(saved), countStyle: .file)
             job.notice("\(shrunk)/\(targets.count)枚を縮小（\(savedText) 節約）")
-            job.reveal([])
         } completion: {
             completion?()
         }
+    }
+
+    /// Synchronous move into the user's Trash. NSWorkspace.recycle is
+    /// asynchronous — combined with a swap it can race and recycle the
+    /// *replacement* file, so DIZUN moves the original itself (a same-volume
+    /// rename; Finder's "Put Back" is not available for these).
+    static func moveToTrash(_ url: URL) throws {
+        let trash = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".Trash", isDirectory: true)
+        let name = url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension
+        var target = trash.appendingPathComponent(ext.isEmpty ? name : "\(name).\(ext)")
+        var n = 2
+        while FileManager.default.fileExists(atPath: target.path) {
+            let variant = ext.isEmpty ? "\(name) (\(n))" : "\(name) (\(n)).\(ext)"
+            target = trash.appendingPathComponent(variant)
+            n += 1
+        }
+        try FileManager.default.moveItem(at: url, to: target)
     }
 
     func compress(files: [URL], mode: CompressMode = .fromSettings,
@@ -304,6 +317,13 @@ final class WorkCoordinator {
         func alert(_ message: String) {
             DispatchQueue.main.sync {
                 WorkPanel.shared.showError(message)
+            }
+        }
+
+        /// Informational report; modal so completion (and termination) waits.
+        func info(_ message: String) {
+            DispatchQueue.main.sync {
+                WorkPanel.shared.flash(message: message)
             }
         }
     }
