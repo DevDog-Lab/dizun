@@ -97,13 +97,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Finder Services (NSServices in Info.plist)
 
+    /// 暗号化なし — services are explicit and never consult the persisted
+    /// droplet setting (that belongs to drag-and-drop only).
     @objc func compressService(_ pboard: NSPasteboard, userData: String,
                                error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         guard let urls = pboard.fileURLs else {
             error?.pointee = "no files on the pasteboard" as NSString
             return
         }
-        coordinator.compress(files: urls) { NSApp.terminate(nil) }
+        coordinator.compress(files: urls, mode: .plain) { NSApp.terminate(nil) }
+    }
+
+    /// 暗号化あり — AES-256, password asked per job.
+    @objc func compressEncryptedService(_ pboard: NSPasteboard, userData: String,
+                                        error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
+        guard let urls = pboard.fileURLs else {
+            error?.pointee = "no files on the pasteboard" as NSString
+            return
+        }
+        coordinator.compress(files: urls, mode: .encrypted) { NSApp.terminate(nil) }
     }
 
     @objc func extractService(_ pboard: NSPasteboard, userData: String,

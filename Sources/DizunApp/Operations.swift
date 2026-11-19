@@ -89,26 +89,45 @@ final class WorkCoordinator {
         }
     }
 
-    func compress(files: [URL], completion: (() -> Void)? = nil) {
-        // Encryption setting picks the scheme; the password is asked per job
-        // and never stored.
+    /// Where a compression job's encryption comes from. Services are
+    /// explicit (`plain`/`encrypted`); drops use the persisted setting.
+    enum CompressMode {
+        case fromSettings
+        case plain
+        case encrypted
+    }
+
+    func compress(files: [URL], mode: CompressMode = .fromSettings,
+                  completion: (() -> Void)? = nil) {
+        // The password is asked per job and never stored.
         var encryption = ZipWriter.Encryption.none
-        switch Settings.compressEncryptionKind {
-        case .none:
+        switch mode {
+        case .plain:
             break
-        case .aes256:
+        case .encrypted:
             guard let password = requestPassword?("暗号化パスワードを設定（AES-256）", true) else {
                 completion?()
                 return
             }
             encryption = .aes256(password: password)
-        case .zipCrypto:
-            guard let password = requestPassword?(
-                "暗号化パスワードを設定（ZipCrypto: 旧方式のため保護は弱いです）", true) else {
-                completion?()
-                return
+        case .fromSettings:
+            switch Settings.compressEncryptionKind {
+            case .none:
+                break
+            case .aes256:
+                guard let password = requestPassword?("暗号化パスワードを設定（AES-256）", true) else {
+                    completion?()
+                    return
+                }
+                encryption = .aes256(password: password)
+            case .zipCrypto:
+                guard let password = requestPassword?(
+                    "暗号化パスワードを設定（ZipCrypto: 旧方式のため保護は弱いです）", true) else {
+                    completion?()
+                    return
+                }
+                encryption = .zipCrypto(password: password)
             }
-            encryption = .zipCrypto(password: password)
         }
         run(panelTitle: "圧縮",
             panelLabel: files.first?.lastPathComponent ?? "") { job in

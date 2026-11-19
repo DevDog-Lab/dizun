@@ -69,7 +69,9 @@
 	</array>
 	<!-- Finder right-click Services. NSSendFileTypes (UTI-based) is required
 	     for Finder to consider the service applicable to a file selection;
-	     legacy NSSendTypes alone registers but never shows in the menu. -->
+	     legacy NSSendTypes alone registers but never shows in the menu.
+	     The two compress entries are explicit: neither consults the
+	     drag-and-drop encryption preference. -->
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -80,6 +82,24 @@
 			</dict>
 			<key>NSMessage</key>
 			<string>compressService</string>
+			<key>NSPortName</key>
+			<string>Dizun</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.item</string>
+				<string>public.folder</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>DIZUNで圧縮（暗号化）</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>compressEncryptedService</string>
 			<key>NSPortName</key>
 			<string>Dizun</string>
 			<key>NSRequiredContext</key>

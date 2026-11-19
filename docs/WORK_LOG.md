@@ -1,5 +1,13 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-19 — 第13回: 圧縮サービスを暗号化あり/なしで分離
+
+- ユーザー報告: 右クリック→サービスの圧縮で、ドロップレット窓で選んだ暗号化設定が共有されており毎回パスワードを求められる。
+- 対応: Servicesに**「DIZUNで圧縮」（暗号化なし・固定）**と**「DIZUNで圧縮（暗号化）」（AES-256・都度パスワード入力）**の2種類を用意。サービス経由は永続設定（Settings.compressEncryptionKind）を参照しない。ドロップレット/ Dockドロップ経路は従来どおり永続設定を使う。
+- 実装: `WorkCoordinator.CompressMode`（fromSettings/plain/encrypted）、`compressEncryptedService`ハンドラ追加、Info.plistのNSServicesを更新。
+- 検証: ビルド警告0・17/17テスト・/Applicationsへインストール・pbsに3サービス登録を確認。
+- コミット: （本コミット）
+
 ## 2026-11-19 — 第12回: アプリアイコン採用とプレビューボタン無効の修正
 
 - ユーザー報告2件へ対応:
