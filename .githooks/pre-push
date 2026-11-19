@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+if [ "${ARCHIVE_APP_PUSH_APPROVED:-}" != "YES_FOR_THIS_COMMAND" ]; then
+  echo 'BLOCKED: push requires explicit user authorization for this destination/ref.' >&2
+  echo 'After authorization, perform preflight and set ARCHIVE_APP_PUSH_APPROVED=YES_FOR_THIS_COMMAND for this push only.' >&2
+  exit 1
+fi
+repo_root="$(git rev-parse --show-toplevel)"
+python3 "$repo_root/scripts/repo_guard.py" history
+gitleaks git --redact --exit-code 1

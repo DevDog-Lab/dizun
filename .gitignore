@@ -1,0 +1,47 @@
+# Credentials / secrets
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.mobileprovision
+*.cer
+*.der
+id_rsa*
+id_ed25519*
+*.kdbx
+*.asc
+**/credentials.json
+**/service-account*.json
+**/secrets.*
+**/*token*.txt
+
+# Mac / Xcode / Swift / build
+.DS_Store
+.AppleDouble
+._*
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+*.dSYM/
+*.app/
+*.ipa
+*.zip
+*.7z
+*.rar
+
+# Upstream research clones (audited separately, never committed)
+research/
+
+# Local operational output
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+coverage/
+node_modules/
