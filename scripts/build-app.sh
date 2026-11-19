@@ -20,6 +20,14 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 codesign --force --sign - "$APP" >/dev/null 2>&1 \
   || codesign --force --sign - "$APP"
 
+# Fail loudly rather than install a stale binary: the executable must be
+# newer than every source file that feeds it.
+NEWEST_SRC=$(find Sources scripts/app -type f -newer .build/release/DizunApp 2>/dev/null | head -1)
+if [ -n "$NEWEST_SRC" ]; then
+  echo "stale release build detected ($NEWEST_SRC newer); run: swift build -c release --product DizunApp" >&2
+  exit 1
+fi
+
 echo "built: $APP"
 
 LSREG=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister

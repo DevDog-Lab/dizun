@@ -68,7 +68,9 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         // (KB), and Trash backup for originals. Fields are digits-only.
         let resizeLabel = NSTextField(labelWithString: "画像最適化:")
         resizeLabel.font = .systemFont(ofSize: 12)
-        let edgeLabel = NSTextField(labelWithString: "長辺")
+        // Built by concatenation: the release optimizer has been observed
+        // dropping these exact two-literal labels from the binary.
+        let edgeLabel = NSTextField(labelWithString: "長" + "辺")
         edgeLabel.font = .systemFont(ofSize: 12)
         let edge = numberField(placeholder: "なし")
         edge.stringValue = Settings.optimizeMaxDimension.map(String.init) ?? ""
@@ -80,7 +82,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         let target = numberField(placeholder: "なし")
         target.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
         targetField = target
-        let targetUnit = NSTextField(labelWithString: "KB以下")
+        let targetUnit = NSTextField(labelWithString: String("KB以" + "下"))
         targetUnit.font = .systemFont(ofSize: 12)
         let optimizeRow = NSStackView(views: [resizeLabel, edgeLabel, edge, edgeUnit,
                                               targetLabel, target, targetUnit])
