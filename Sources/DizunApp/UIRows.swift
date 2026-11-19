@@ -15,6 +15,19 @@ enum DizunRows {
         return field
     }
 
+    /// Row labels that sit on the brand-blue panels read best in white.
+    static func tintedLabel(_ text: String) -> NSTextField {
+        let field = label(text)
+        field.textColor = .white
+        return field
+    }
+
+    static func tintedHint(_ text: String) -> NSTextField {
+        let field = hint(text)
+        field.textColor = NSColor.white.withAlphaComponent(0.75)
+        return field
+    }
+
     static func hint(_ text: String) -> NSTextField {
         let field = NSTextField(labelWithString: text)
         field.font = .systemFont(ofSize: 11)
@@ -30,8 +43,9 @@ enum DizunRows {
 
     /// A fixed label column followed by a compact control group. Hints belong
     /// to that group so they never drift to the trailing edge of the window.
-    static func row(label: String, controls: [NSView], hint: String? = nil) -> NSStackView {
-        let text = self.label(label)
+    static func row(label: String, controls: [NSView], hint: String? = nil,
+                    tinted: Bool = false) -> NSStackView {
+        let text = tinted ? tintedLabel(label) : self.label(label)
         let controlLine = NSStackView(views: controls)
         controlLine.orientation = .horizontal
         controlLine.spacing = 8
@@ -40,7 +54,7 @@ enum DizunRows {
 
         var detailViews: [NSView] = [controlLine]
         if let hint {
-            detailViews.append(self.hint(hint))
+            detailViews.append(tinted ? tintedHint(hint) : self.hint(hint))
         }
         let details = NSStackView(views: detailViews)
         details.orientation = .vertical

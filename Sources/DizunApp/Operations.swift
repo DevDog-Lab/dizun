@@ -21,6 +21,9 @@ final class WorkCoordinator {
     /// Password prompts, injected so the coordinator stays UI-free-ish.
     /// `confirm == true` asks twice (new password). Always main-thread.
     var requestPassword: ((_ title: String, _ confirm: Bool) -> String?)?
+    /// Job summaries for the droplet's result area (called from the work
+    /// queue; the receiver hops to main itself).
+    var reportResult: ((String) -> Void)?
 
     /// Drop / open heuristic: only .zips → extract, anything else → compress.
     /// A lone ZIP is routed to the preview first when one is configured.
@@ -67,6 +70,7 @@ final class WorkCoordinator {
             panelLabel: archives.first?.lastPathComponent ?? "") { job in
             var revealed = false
             var failures: [String] = []
+            var extractedNames: [String] = []
             for (index, archive) in archives.enumerated() {
                 if job.isCancelled { throw DizunError.cancelled }
                 let prefix = archives.count > 1 ? "（\(index + 1)/\(archives.count)）" : ""
@@ -84,12 +88,18 @@ final class WorkCoordinator {
                         job.reveal(result.extractedTopItems)
                         revealed = true
                     }
+                    extractedNames.append(contentsOf: result.extractedTopItems.map { $0.lastPathComponent })
                 } catch {
                     if archives.count == 1 { throw error }
                     failures.append("\(archive.lastPathComponent): \(error.localizedDescription)")
                 }
             }
             if !failures.isEmpty { job.alert(failures.joined(separator: "\n")) }
+            let names = extractedNames.prefix(3).joined(separator: "、")
+            let rest = extractedNames.count > 3 ? " ほか\(extractedNames.count - 3)件" : ""
+            if !names.isEmpty {
+                self.reportResult?("解凍完了：\(names)\(rest)")
+            }
         } completion: {
             completion?()
         }
@@ -116,6 +126,7 @@ final class WorkCoordinator {
             var totalBefore = 0
             var totalAfter = 0
             var shrunk = 0
+            var lines: [String] = []
             for (index, url) in targets.enumerated() {
                 if job.isCancelled { throw DizunError.cancelled }
                 job.update("（\(index + 1)/\(targets.count)）\(url.lastPathComponent)")
@@ -127,7 +138,13 @@ final class WorkCoordinator {
                 let result = try ImageOptimizer.optimize(url, options: options, backup: backup)
                 totalBefore += result.originalSize
                 totalAfter += result.skipped ? result.originalSize : result.optimizedSize
-                if !result.skipped { shrunk += 1 }
+                if result.skipped {
+                    lines.append("\(url.lastPathComponent)：縮小なし")
+                } else {
+                    shrunk += 1
+                    let percent = 100 * result.savedBytes / max(result.originalSize, 1)
+                    lines.append("\(url.lastPathComponent)：\(ByteCountFormatter.string(fromByteCount: Int64(result.originalSize), countStyle: .file)) → \(ByteCountFormatter.string(fromByteCount: Int64(result.optimizedSize), countStyle: .file))（\(percent)%減）")
+                }
             }
             if shrunk == 0 {
                 job.info("縮小できませんでした（\(targets.count)枚）。すでに最適化されているか、目標サイズに対して画像が小さい可能性があります。")
@@ -135,6 +152,9 @@ final class WorkCoordinator {
             let saved = max(totalBefore - totalAfter, 0)
             let savedText = ByteCountFormatter.string(fromByteCount: Int64(saved), countStyle: .file)
             job.notice("\(shrunk)/\(targets.count)枚を縮小（\(savedText) 節約）")
+            let shown = lines.prefix(5).joined(separator: "\n")
+            let rest = lines.count > 5 ? "\n…ほか\(lines.count - 5)枚" : ""
+            self.reportResult?("最適化完了（\(shrunk)/\(targets.count)枚・\(savedText)減）\n\(shown)\(rest)")
         } completion: {
             completion?()
         }

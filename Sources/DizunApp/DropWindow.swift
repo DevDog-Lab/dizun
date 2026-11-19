@@ -12,6 +12,9 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     private var targetField: NSTextField?
     private var settingsPages: [NSView] = []
     private var contentStack: NSStackView?
+    private var resultLabel = NSTextField(wrappingLabelWithString: "")
+    private var dropCaption = NSTextField(labelWithString: "ここにドロップ")
+    private var dropHint = NSTextField(labelWithString: "ZIPは解凍・画像は最適化・ほかは圧縮")
 
     init(coordinator: WorkCoordinator) {
         self.coordinator = coordinator
@@ -42,15 +45,19 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         // ZIP / image / anything-else routing in one calm sentence.
         let drop = DropView()
         drop.onDrop = { [weak self] urls in
+            self?.clearResult()
             self?.coordinator.performAutomatic(urls: urls) {}
         }
-        let dropCaption = NSTextField(labelWithString: "ここにドロップ")
         dropCaption.font = .systemFont(ofSize: 13)
         dropCaption.textColor = .white
-        let dropHint = NSTextField(labelWithString: "ZIPは解凍・画像は最適化・ほかは圧縮")
         dropHint.font = .systemFont(ofSize: 11)
         dropHint.textColor = NSColor.white.withAlphaComponent(0.75)
-        let dropStack = NSStackView(views: [dropCaption, dropHint])
+        resultLabel = NSTextField(wrappingLabelWithString: "")
+        resultLabel.font = .systemFont(ofSize: 12)
+        resultLabel.textColor = .white
+        resultLabel.alignment = .center
+        resultLabel.isHidden = true
+        let dropStack = NSStackView(views: [dropCaption, dropHint, resultLabel])
         dropStack.orientation = .vertical
         dropStack.alignment = .centerX
         dropStack.spacing = 4
@@ -78,9 +85,9 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         panel.boxType = .custom
         panel.titlePosition = .noTitle
         panel.borderWidth = 1
-        panel.borderColor = .separatorColor
-        panel.fillColor = .controlBackgroundColor
-        panel.cornerRadius = 8
+        panel.borderColor = NSColor.white.withAlphaComponent(0.6)
+        panel.fillColor = NSColor.white.withAlphaComponent(0.12)
+        panel.cornerRadius = 10
         panel.contentViewMargins = .zero
         let panelContent = panel.contentView!
         panelContent.addSubview(panelStack)
@@ -105,18 +112,40 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
-            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 48),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
             drop.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            drop.heightAnchor.constraint(equalToConstant: 120),
+            drop.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
             panel.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         self.window = window
+        // Job summaries land in the drop area until the next drop
+        // (per-file detail for images).
+        coordinator.reportResult = { [weak self] summary in
+            DispatchQueue.main.async {
+                self?.showResult(summary)
+            }
+        }
         fitWindowToContent()
         window.center()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Job summaries land in the drop area until the next drop.
+    private func showResult(_ summary: String) {
+        resultLabel.stringValue = summary
+        resultLabel.isHidden = false
+        dropHint.isHidden = true
+        dropCaption.stringValue = "完了"
+    }
+
+    private func clearResult() {
+        resultLabel.stringValue = ""
+        resultLabel.isHidden = true
+        dropHint.isHidden = false
+        dropCaption.stringValue = "ここにドロップ"
     }
 
     /// Re-assert visibility (used by the delayed launch kick): brings the
@@ -164,11 +193,11 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             selected: cryptoSelection)
         return DizunRows.group([
             DizunRows.row(label: "圧縮時のファイル名", controls: [
-                DizunRows.hint("例）報告書.zip ／ 複数なら Archive.zip"),
-            ]),
-            DizunRows.row(label: "ファイル名の文字コード", controls: [encoding]),
+                DizunRows.tintedHint("例）報告書.zip ／ 複数なら Archive.zip"),
+            ], tinted: true),
+            DizunRows.row(label: "ファイル名の文字コード", controls: [encoding], tinted: true),
             DizunRows.row(label: "暗号化", controls: [crypto],
-                          hint: "二重ZIPで構成も隠す"),
+                          hint: "二重ZIPで構成も隠す", tinted: true),
         ])
     }
 
@@ -186,13 +215,16 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
                               target: self, action: #selector(backupChanged(_:)))
         backup.state = Settings.optimizeBackupToTrash ? .on : .off
         backup.font = .systemFont(ofSize: 12)
+        backup.attributedTitle = NSAttributedString(
+            string: "ゴミ箱へ残す",
+            attributes: [.foregroundColor: NSColor.white, .font: NSFont.systemFont(ofSize: 12)])
 
         return DizunRows.group([
-            DizunRows.row(label: "長辺上限", controls: [edge, DizunRows.label("px")],
-                          hint: "空欄でリサイズなし"),
-            DizunRows.row(label: "目標サイズ", controls: [target, DizunRows.label("KB以下")],
-                          hint: "空欄で指定なし"),
-            DizunRows.row(label: "元画像", controls: [backup]),
+            DizunRows.row(label: "長辺上限", controls: [edge, DizunRows.tintedLabel("px")],
+                          hint: "空欄でリサイズなし", tinted: true),
+            DizunRows.row(label: "目標サイズ", controls: [target, DizunRows.tintedLabel("KB以下")],
+                          hint: "空欄で指定なし", tinted: true),
+            DizunRows.row(label: "元画像", controls: [backup], tinted: true),
         ], spacing: 12)
     }
 
