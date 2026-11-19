@@ -82,16 +82,16 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         targetField = target
         let targetUnit = NSTextField(labelWithString: "KB以下")
         targetUnit.font = .systemFont(ofSize: 12)
-        let backupToggle = NSButton(checkboxWithTitle: "元画像をゴミ箱へ",
-                                    target: self, action: #selector(backupChanged(_:)))
-        backupToggle.state = Settings.optimizeBackupToTrash ? .on : .off
         let optimizeRow = NSStackView(views: [resizeLabel, edgeLabel, edge, edgeUnit,
-                                              targetLabel, target, targetUnit,
-                                              NSStackView.spacerView, backupToggle])
+                                              targetLabel, target, targetUnit])
         optimizeRow.orientation = .horizontal
         optimizeRow.spacing = 6
 
-        let stack = NSStackView(views: [title, subtitle, drop, encodingRow, optimizeRow])
+        let backupToggle = NSButton(checkboxWithTitle: "元画像をゴミ箱へ（最適化の前に元ファイルを退避）",
+                                    target: self, action: #selector(backupChanged(_:)))
+        backupToggle.state = Settings.optimizeBackupToTrash ? .on : .off
+
+        let stack = NSStackView(views: [title, subtitle, drop, encodingRow, optimizeRow, backupToggle])
         stack.orientation = .vertical
         stack.spacing = 12
         stack.alignment = .centerX
@@ -109,7 +109,8 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         // Size the window to what the rows actually need (a fixed height
         // used to clip the bottom row out of view).
         let fitting = stack.fittingSize
-        window.setContentSize(NSSize(width: 480, height: fitting.height + 40))
+        window.setContentSize(NSSize(width: max(520, fitting.width + 48),
+                                     height: fitting.height + 40))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
@@ -150,7 +151,9 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     }
 
     private func numberField(placeholder: String) -> NSTextField {
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 90, height: 24))
+        // Just wide enough for five digits — keeps the settings row inside
+        // the window at every localization width.
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 52, height: 24))
         field.placeholderString = placeholder
         field.font = .systemFont(ofSize: 12)
         field.bezelStyle = .roundedBezel
