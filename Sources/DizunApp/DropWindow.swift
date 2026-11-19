@@ -153,9 +153,13 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     }
 
     private func numberField(placeholder: String) -> NSTextField {
-        // Just wide enough for five digits — keeps the settings row inside
-        // the window at every localization width.
+        // Five digits wide. The width must be an explicit layout
+        // constraint: an editable NSTextField's intrinsic size is a default
+        // field width (~100pt), which Auto Layout uses in stack views —
+        // the frame value alone is ignored.
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 52, height: 24))
+        field.widthAnchor.constraint(equalToConstant: 52).isActive = true
+        field.setContentHuggingPriority(.required, for: .horizontal)
         field.placeholderString = placeholder
         field.font = .systemFont(ofSize: 12)
         field.bezelStyle = .roundedBezel
