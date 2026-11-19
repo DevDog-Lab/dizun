@@ -5,9 +5,11 @@ import Foundation
 /// The plain-launch window: explains what DIZUN does and accepts drops.
 /// ZIPs are extracted, everything else is compressed — same heuristic the
 /// open/service paths use.
-final class DropletWindowController: NSObject, NSWindowDelegate {
+final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     private let coordinator: WorkCoordinator
     private var window: NSWindow?
+    private var edgeField: NSTextField?
+    private var targetField: NSTextField?
 
     init(coordinator: WorkCoordinator) {
         self.coordinator = coordinator
@@ -62,27 +64,32 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
         encodingRow.orientation = .horizontal
         encodingRow.spacing = 8
 
-        // Image optimization: custom long-edge cap, JPEG target size, and
-        // Trash backup for originals.
+        // Image optimization: custom long-edge cap (px), JPEG target size
+        // (KB), and Trash backup for originals. Fields are digits-only.
         let resizeLabel = NSTextField(labelWithString: "画像最適化:")
         resizeLabel.font = .systemFont(ofSize: 12)
-        let edgeField = numberField(placeholder: "長辺px 任意")
-        edgeField.stringValue = Settings.optimizeMaxDimension.map(String.init) ?? ""
-        edgeField.target = self
-        edgeField.action = #selector(edgeChanged(_:))
+        let edgeLabel = NSTextField(labelWithString: "長辺")
+        edgeLabel.font = .systemFont(ofSize: 12)
+        let edge = numberField(placeholder: "なし")
+        edge.stringValue = Settings.optimizeMaxDimension.map(String.init) ?? ""
+        edgeField = edge
+        let edgeUnit = NSTextField(labelWithString: "px")
+        edgeUnit.font = .systemFont(ofSize: 12)
         let targetLabel = NSTextField(labelWithString: "目標")
         targetLabel.font = .systemFont(ofSize: 12)
-        let targetField = numberField(placeholder: "KB以下")
-        targetField.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
-        targetField.target = self
-        targetField.action = #selector(targetChanged(_:))
+        let target = numberField(placeholder: "なし")
+        target.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
+        targetField = target
+        let targetUnit = NSTextField(labelWithString: "KB以下")
+        targetUnit.font = .systemFont(ofSize: 12)
         let backupToggle = NSButton(checkboxWithTitle: "元画像をゴミ箱へ",
                                     target: self, action: #selector(backupChanged(_:)))
         backupToggle.state = Settings.optimizeBackupToTrash ? .on : .off
-        let optimizeRow = NSStackView(views: [resizeLabel, edgeField, targetLabel, targetField,
+        let optimizeRow = NSStackView(views: [resizeLabel, edgeLabel, edge, edgeUnit,
+                                              targetLabel, target, targetUnit,
                                               NSStackView.spacerView, backupToggle])
         optimizeRow.orientation = .horizontal
-        optimizeRow.spacing = 8
+        optimizeRow.spacing = 6
 
         let stack = NSStackView(views: [title, subtitle, drop, encodingRow, optimizeRow])
         stack.orientation = .vertical
@@ -96,10 +103,13 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
-            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
             drop.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
             drop.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
         ])
+        // Size the window to what the rows actually need (a fixed height
+        // used to clip the bottom row out of view).
+        let fitting = stack.fittingSize
+        window.setContentSize(NSSize(width: 480, height: fitting.height + 40))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
@@ -110,21 +120,42 @@ final class DropletWindowController: NSObject, NSWindowDelegate {
     }
 
     @objc private func edgeChanged(_ sender: NSTextField) {
-        Settings.optimizeMaxDimension = Int(sender.stringValue.trimmingCharacters(in: .whitespaces))
+        Settings.optimizeMaxDimension = Int(sender.stringValue)
     }
 
     @objc private func targetChanged(_ sender: NSTextField) {
-        Settings.optimizeTargetKB = Int(sender.stringValue.trimmingCharacters(in: .whitespaces))
+        Settings.optimizeTargetKB = Int(sender.stringValue)
+    }
+
+    /// Digits-only fields: full-width digits (IME) are converted to
+    /// half-width and everything else is dropped as it is typed, so the
+    /// active field effectively behaves as half-width numeric input.
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField,
+              field == edgeField || field == targetField else { return }
+        let fullWidth: [Character: Character] = [
+            "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
+            "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
+        ]
+        let converted = String(field.stringValue.map { fullWidth[$0] ?? $0 })
+        let digits = String(converted.prefix(5).filter { $0.isASCII && $0.isNumber })
+        if digits != field.stringValue {
+            field.stringValue = digits
+        }
+        if field == edgeField {
+            Settings.optimizeMaxDimension = Int(digits)
+        } else {
+            Settings.optimizeTargetKB = Int(digits)
+        }
     }
 
     private func numberField(placeholder: String) -> NSTextField {
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 110, height: 24))
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 90, height: 24))
         field.placeholderString = placeholder
         field.font = .systemFont(ofSize: 12)
         field.bezelStyle = .roundedBezel
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .none
-        field.formatter = formatter
+        field.delegate = self
+        field.usesSingleLineMode = true
         return field
     }
 
