@@ -30,6 +30,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // with the droplet open the app stays.
             self?.showPreview(of: url, autoQuit: self?.droplet == nil)
         }
+        L10n.refresh()
+        NotificationCenter.default.addObserver(
+            forName: .init("dizunLanguageChanged"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                NSApp.mainMenu = self?.buildMainMenu()
+                self?.droplet?.show()
+                SettingsWindowController.shared.rebuildForLanguage()
+            }
+        }
         launched = true
         // Re-assert activation once the run loop is live: some launch
         // contexts (Dock reopen, background launch) leave a regular app
@@ -57,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             guard let preview = ArchivePreviewWindowController(
                 archiveURL: url, coordinator: coordinator, autoQuit: autoQuit) else {
-                WorkPanel.shared.showError("ZIPアーカイブとして読み込めません:\n\(url.lastPathComponent)")
+                WorkPanel.shared.showError(L10n.notAZip(url.lastPathComponent))
                 if autoQuit { NSApp.terminate(nil) }
                 return
             }
@@ -122,18 +132,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appItem = NSMenuItem(title: "DIZUN", action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "DIZUNについて", action: #selector(showAbout), keyEquivalent: "")
+        appMenu.addItem(withTitle: L10n.aboutDizun, action: #selector(showAbout), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "設定…", action: #selector(showSettings), keyEquivalent: ",")
+        appMenu.addItem(withTitle: L10n.settingsEllipsis, action: #selector(showSettings), keyEquivalent: ",")
         appMenu.addItem(.separator())
-        let services = appMenu.addItem(withTitle: "サービス", action: nil, keyEquivalent: "")
+        let services = appMenu.addItem(withTitle: L10n.services, action: nil, keyEquivalent: "")
         let servicesMenu = NSMenu()
         services.submenu = servicesMenu
         NSApp.servicesMenu = servicesMenu
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "閉じる", action: #selector(performClose(_:)), keyEquivalent: "w")
+        appMenu.addItem(withTitle: L10n.close, action: #selector(performClose(_:)), keyEquivalent: "w")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "DIZUNを終了", action: #selector(NSApplication.terminate(_:)),
+        appMenu.addItem(withTitle: L10n.quitDizun, action: #selector(NSApplication.terminate(_:)),
                          keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)

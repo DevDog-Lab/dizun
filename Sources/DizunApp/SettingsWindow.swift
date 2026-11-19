@@ -25,7 +25,12 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         window.isReleasedWhenClosed = false
 
         window.collectionBehavior = [.moveToActiveSpace]
-        let heading = DizunRows.sectionTitle("画像最適化の既定値")
+        let heading = DizunRows.sectionTitle(L10n.imageDefaults)
+        let languageLabel = L10n.language
+        let language = DizunRows.segmented(
+            [L10n.systemSetting, "日本語", "English"],
+            target: self, action: #selector(languageChanged(_:)),
+            selected: ["system", "ja", "en"].firstIndex(of: Settings.languageRaw) ?? 0)
 
         let edge = Self.digitsField()
         edge.delegate = self
@@ -45,6 +50,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         // aligned label column, consistent hints.
         let stack = DizunRows.group([
             heading,
+            DizunRows.row(label: languageLabel, controls: [language]),
             DizunRows.row(label: "長辺上限", controls: [edge, DizunRows.label("px")],
                           hint: "空欄でリサイズなし"),
             DizunRows.row(label: "目標サイズ", controls: [target, DizunRows.label("KB以下")],
@@ -66,6 +72,20 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+    }
+
+    @objc private func languageChanged(_ sender: NSSegmentedControl) {
+        Settings.languageRaw = ["system", "ja", "en"][sender.selectedSegment]
+        L10n.refresh()
+        NotificationCenter.default.post(name: .init("dizunLanguageChanged"), object: nil)
+    }
+
+    /// Rebuild with the current language (keeps open state).
+    func rebuildForLanguage() {
+        let wasVisible = window?.isVisible ?? false
+        window?.close()
+        window = nil
+        if wasVisible { show() }
     }
 
     @objc private func backupChanged(_ sender: NSButton) {

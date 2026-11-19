@@ -24,6 +24,7 @@ final class WorkPanel {
         itemLabel.stringValue = label
         noticeLabel.stringValue = ""
         indicator.startAnimation(nil)
+        cancelButton?.title = L10n.cancel
         cancelButton?.isEnabled = true
         cancelHandler = onCancel
         if !window.isVisible {
@@ -48,6 +49,12 @@ final class WorkPanel {
     }
 
     /// Brief message without a running job (e.g. double drop while busy).
+    func flashBusy() {
+        let alert = NSAlert()
+        alert.messageText = L10n.busyMessage
+        alert.runModal()
+    }
+
     func flash(message: String) {
         let alert = NSAlert()
         alert.messageText = message
@@ -58,7 +65,7 @@ final class WorkPanel {
     func showError(_ message: String) {
         let alert = NSAlert()
         alert.alertStyle = .critical
-        alert.messageText = "DIZUNで問題が起きました"
+        alert.messageText = L10n.problemTitle
         alert.informativeText = message
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
@@ -89,7 +96,7 @@ final class WorkPanel {
         indicator.controlSize = .small
         indicator.isDisplayedWhenStopped = false
 
-        let cancel = NSButton(title: "キャンセル", target: self, action: #selector(cancelClicked))
+        let cancel = NSButton(title: L10n.cancel, target: self, action: #selector(cancelClicked))
         cancel.bezelStyle = .rounded
         cancelButton = cancel
 
@@ -117,7 +124,7 @@ final class WorkPanel {
 
     @objc private func cancelClicked() {
         cancelButton?.isEnabled = false
-        itemLabel.stringValue = "キャンセルしています…"
+        itemLabel.stringValue = L10n.cancelling
         cancelHandler?()
     }
 }

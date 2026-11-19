@@ -64,6 +64,12 @@ enum Settings {
         }
     }
 
+    /// UI language: "system" (default), "ja" or "en".
+    static var languageRaw: String {
+        get { defaults.string(forKey: "language") ?? "system" }
+        set { defaults.set(newValue, forKey: "language") }
+    }
+
     /// Keep the pre-optimization original in the Trash (recommended).
     static var optimizeBackupToTrash: Bool {
         get { defaults.object(forKey: "optimizeBackupToTrash") as? Bool ?? true }

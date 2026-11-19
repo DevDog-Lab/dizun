@@ -18,22 +18,21 @@ final class AboutWindowController {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 240),
                               styleMask: [.titled, .closable],
                               backing: .buffered, defer: false)
-        window.title = "DIZUNについて"
+        window.title = L10n.aboutTitle
         window.isReleasedWhenClosed = false
 
         window.collectionBehavior = [.moveToActiveSpace]
         let title = NSTextField(labelWithString: "DIZUN")
         title.font = .boldSystemFont(ofSize: 28)
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
-        let versionLabel = NSTextField(labelWithString: "バージョン \(version)（開発中・未リリース）")
+        let versionLabel = NSTextField(labelWithString: L10n.versionLine(version))
         versionLabel.font = .systemFont(ofSize: 12)
         versionLabel.textColor = .secondaryLabelColor
-        let blurb = NSTextField(wrappingLabelWithString:
-            "圧縮と解凍をひとつにした、macOS向けアーカイブアプリ。日本語ファイル名とWindows/macOS間の互換性を重視します。")
+        let blurb = NSTextField(wrappingLabelWithString: L10n.aboutBlurb)
         blurb.font = .systemFont(ofSize: 12)
         blurb.textColor = .secondaryLabelColor
 
-        let link = NSButton(title: "GitHub README を開く", target: self, action: #selector(openReadme))
+        let link = NSButton(title: L10n.openReadme, target: self, action: #selector(openReadme))
         link.bezelStyle = .rounded
 
         let stack = NSStackView(views: [title, versionLabel, blurb, link])

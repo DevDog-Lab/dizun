@@ -88,17 +88,17 @@ final class ArchivePreviewWindowController: NSObject, NSWindowDelegate {
         tableView?.reloadData()
 
         let total = entries.filter { !$0.isDirectory }.reduce(UInt64(0)) { $0 + $1.uncompressedSize }
-        summaryLabel.stringValue =
-            "\(entries.count)項目・\(ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file))"
+        summaryLabel.stringValue = L10n.summary(
+            entries.count, ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file))
 
         var warnings: [String] = []
         let unsupported = entries.filter { $0.method != Zip.methodStore && $0.method != Zip.methodDeflate }
         if !unsupported.isEmpty {
-            warnings.append("未対応の圧縮方式の項目: \(unsupported.count)件")
+            warnings.append(L10n.unsupportedWarning(unsupported.count))
         }
         let encrypted = entries.filter(\.isEncrypted)
         if !encrypted.isEmpty {
-            warnings.append("パスワード保護された項目: \(encrypted.count)件（解凍時に尋ねます）")
+            warnings.append(L10n.encryptedWarning(encrypted.count))
         }
         warningLabel.stringValue = warnings.joined(separator: "\n")
     }
@@ -110,19 +110,20 @@ final class ArchivePreviewWindowController: NSObject, NSWindowDelegate {
         summaryLabel.textColor = .secondaryLabelColor
 
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-        let auto = NSMenuItem(title: "自動判定（\(reader.detectedEncoding == .cp932 ? "CP932" : "UTF-8")）",
+        let auto = NSMenuItem(title: L10n.encodingAuto(
+            reader.detectedEncoding == .cp932 ? L10n.detectedCP932 : L10n.detectedUTF8),
                               action: #selector(encodingChanged), keyEquivalent: "")
         auto.tag = 0
         let utf8 = NSMenuItem(title: "UTF-8", action: #selector(encodingChanged), keyEquivalent: "")
         utf8.tag = 1
-        let cp932 = NSMenuItem(title: "CP932（Windows）", action: #selector(encodingChanged), keyEquivalent: "")
+        let cp932 = NSMenuItem(title: L10n.cp932Windows, action: #selector(encodingChanged), keyEquivalent: "")
         cp932.tag = 2
         [auto, utf8, cp932].forEach { $0.target = self }
         popup.menu?.items = [auto, utf8, cp932]
         popup.bezelStyle = .rounded
         encodingPopup = popup
 
-        let label = NSTextField(labelWithString: "ファイル名の文字コード:")
+        let label = NSTextField(labelWithString: L10n.fileEncoding + ":")
         label.font = .systemFont(ofSize: 12)
         let spacer = NSView()   // pushes the summary to the trailing edge
         let row = NSStackView(views: [label, popup, spacer, summaryLabel])
@@ -134,10 +135,10 @@ final class ArchivePreviewWindowController: NSObject, NSWindowDelegate {
     private func makeTable() -> NSScrollView {
         let table = NSTableView()
         let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
-        nameColumn.title = "名前"
+        nameColumn.title = L10n.nameColumn
         nameColumn.width = 400
         let sizeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("size"))
-        sizeColumn.title = "サイズ"
+        sizeColumn.title = L10n.sizeColumn
         sizeColumn.width = 110
         table.addTableColumn(nameColumn)
         table.addTableColumn(sizeColumn)
@@ -155,10 +156,10 @@ final class ArchivePreviewWindowController: NSObject, NSWindowDelegate {
         warningLabel.font = .systemFont(ofSize: 11)
         warningLabel.textColor = .systemRed
 
-        let extract = NSButton(title: "解凍", target: self, action: #selector(extractClicked))
+        let extract = NSButton(title: L10n.extract, target: self, action: #selector(extractClicked))
         extract.bezelStyle = .push
         extract.keyEquivalent = "\r"
-        let cancel = NSButton(title: "キャンセル", target: self, action: #selector(cancelClicked))
+        let cancel = NSButton(title: L10n.cancel, target: self, action: #selector(cancelClicked))
         cancel.bezelStyle = .push
         cancel.keyEquivalent = "\u{1b}"
 

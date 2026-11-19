@@ -6,6 +6,8 @@ import Foundation
 /// Runs compression/extraction jobs on a background queue and reports to the
 /// progress panel. Alerts are synchronous so one-shot termination never
 /// overtakes them.
+private var lang: AppLanguage { L10n.lang }
+
 final class WorkCoordinator {
     private let queue = DispatchQueue(label: "com.devdoglab.dizun.work", qos: .userInitiated)
     private var busy = false
@@ -57,7 +59,7 @@ final class WorkCoordinator {
                 guard let reader = try? ZipReader(url: archive) else { continue }
                 if reader.entries.contains(where: { $0.isEncrypted && !$0.isDirectory }) {
                     guard let supplied = requestPassword?(
-                        "「\(archive.lastPathComponent)」はパスワードで保護されています", false) else {
+                        L10n.protectedArchive(archive.lastPathComponent), false) else {
                         completion?()
                         return
                     }
@@ -66,7 +68,7 @@ final class WorkCoordinator {
                 }
             }
         }
-        run(panelTitle: "解凍",
+        run(panelTitle: L10n.extract,
             panelLabel: archives.first?.lastPathComponent ?? "") { job in
             var revealed = false
             var failures: [String] = []
@@ -95,10 +97,9 @@ final class WorkCoordinator {
                 }
             }
             if !failures.isEmpty { job.alert(failures.joined(separator: "\n")) }
-            let names = extractedNames.prefix(3).joined(separator: "、")
-            let rest = extractedNames.count > 3 ? " ほか\(extractedNames.count - 3)件" : ""
+            let names = extractedNames.prefix(3).joined(separator: lang.isEN ? ", " : "、")
             if !names.isEmpty {
-                self.reportResult?("解凍完了：\(names)\(rest)")
+                self.reportResult?(L10n.extractionDone(names, more: extractedNames.count - 3))
             }
         } completion: {
             completion?()
@@ -121,7 +122,7 @@ final class WorkCoordinator {
             completion?()
             return
         }
-        run(panelTitle: "画像最適化",
+        run(panelTitle: L10n.optimizeTitle,
             panelLabel: targets.first?.lastPathComponent ?? "") { job in
             var totalBefore = 0
             var totalAfter = 0
@@ -139,22 +140,26 @@ final class WorkCoordinator {
                 totalBefore += result.originalSize
                 totalAfter += result.skipped ? result.originalSize : result.optimizedSize
                 if result.skipped {
-                    lines.append("\(url.lastPathComponent)：縮小なし")
+                    lines.append("\(url.lastPathComponent)：\(L10n.optimizeNoChange)")
                 } else {
                     shrunk += 1
                     let percent = 100 * result.savedBytes / max(result.originalSize, 1)
-                    lines.append("\(url.lastPathComponent)：\(ByteCountFormatter.string(fromByteCount: Int64(result.originalSize), countStyle: .file)) → \(ByteCountFormatter.string(fromByteCount: Int64(result.optimizedSize), countStyle: .file))（\(percent)%減）")
+                    lines.append(L10n.optimizeLine(
+                        url.lastPathComponent,
+                        ByteCountFormatter.string(fromByteCount: Int64(result.originalSize), countStyle: .file),
+                        ByteCountFormatter.string(fromByteCount: Int64(result.optimizedSize), countStyle: .file),
+                        percent))
                 }
             }
             if shrunk == 0 {
-                job.info("縮小できませんでした（\(targets.count)枚）。すでに最適化されているか、目標サイズに対して画像が小さい可能性があります。")
+                job.info(L10n.nothingShrunk(targets.count))
             }
             let saved = max(totalBefore - totalAfter, 0)
             let savedText = ByteCountFormatter.string(fromByteCount: Int64(saved), countStyle: .file)
-            job.notice("\(shrunk)/\(targets.count)枚を縮小（\(savedText) 節約）")
+            job.notice(L10n.shrunkNotice(shrunk, targets.count, savedText))
             let shown = lines.prefix(5).joined(separator: "\n")
-            let rest = lines.count > 5 ? "\n…ほか\(lines.count - 5)枚" : ""
-            self.reportResult?("最適化完了（\(shrunk)/\(targets.count)枚・\(savedText)減）\n\(shown)\(rest)")
+            let rest = lines.count > 5 ? "\n" + L10n.moreImages(lines.count - 5) : ""
+            self.reportResult?(L10n.optimizeDone(shrunk, targets.count, savedText) + "\n" + shown + rest)
         } completion: {
             completion?()
         }
@@ -187,7 +192,7 @@ final class WorkCoordinator {
         case .plain:
             break
         case .encrypted:
-            guard let password = requestPassword?("暗号化パスワードを設定（AES-256）", true) else {
+            guard let password = requestPassword?(L10n.setPasswordTitle(false), true) else {
                 completion?()
                 return
             }
@@ -197,21 +202,20 @@ final class WorkCoordinator {
             case .none:
                 break
             case .aes256:
-                guard let password = requestPassword?("暗号化パスワードを設定（AES-256）", true) else {
+                guard let password = requestPassword?(L10n.setPasswordTitle(false), true) else {
                     completion?()
                     return
                 }
                 encryption = .aes256(password: password)
             case .zipCrypto:
-                guard let password = requestPassword?(
-                    "暗号化パスワードを設定（ZipCrypto: 旧方式のため保護は弱いです）", true) else {
+                guard let password = requestPassword?(L10n.setPasswordTitle(true), true) else {
                     completion?()
                     return
                 }
                 encryption = .zipCrypto(password: password)
             }
         }
-        run(panelTitle: "圧縮",
+        run(panelTitle: L10n.compressTitle,
             panelLabel: files.first?.lastPathComponent ?? "") { job in
             let destination = try Self.archiveDestination(for: files)
             job.update(destination.lastPathComponent)
@@ -284,7 +288,7 @@ final class WorkCoordinator {
                      completion: @escaping () -> Void) {
         guard !busy else {
             DispatchQueue.main.async {
-                WorkPanel.shared.flash(message: "前の処理が終わってから実行してください")
+                WorkPanel.shared.flashBusy()
             }
             completion()
             return

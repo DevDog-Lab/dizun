@@ -13,8 +13,8 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     private var settingsPages: [NSView] = []
     private var contentStack: NSStackView?
     private var resultLabel = NSTextField(wrappingLabelWithString: "")
-    private var dropCaption = NSTextField(labelWithString: "ここにドロップ")
-    private var dropHint = NSTextField(labelWithString: "ZIPは解凍・画像は最適化・ほかは圧縮")
+    private var dropCaption = NSTextField(labelWithString: L10n.dropHere)
+    private var dropHint = NSTextField(labelWithString: L10n.dropHint)
 
     init(coordinator: WorkCoordinator) {
         self.coordinator = coordinator
@@ -22,6 +22,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     }
 
     func show() {
+        window?.close()
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
                               styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
@@ -70,7 +71,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
 
         // A full-width standard selector and its content share one panel.
         let selector = DizunRows.segmented(
-            ["圧縮・解凍", "画像最適化"], target: self,
+            [L10n.tabArchive, L10n.tabImages], target: self,
             action: #selector(settingsTabChanged(_:)), selected: 0)
         selector.segmentDistribution = .fill
         selector.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -138,14 +139,14 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         resultLabel.stringValue = summary
         resultLabel.isHidden = false
         dropHint.isHidden = true
-        dropCaption.stringValue = "完了"
+        dropCaption.stringValue = L10n.done
     }
 
     private func clearResult() {
         resultLabel.stringValue = ""
         resultLabel.isHidden = true
         dropHint.isHidden = false
-        dropCaption.stringValue = "ここにドロップ"
+        dropCaption.stringValue = L10n.dropHere
     }
 
     /// Re-assert visibility (used by the delayed launch kick): brings the
@@ -178,7 +179,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     /// One setting per row, aligned label column.
     private func zipTab() -> NSView {
         let encoding = DizunRows.segmented(
-            ["UTF-8（標準）", "CP932（Windows互換）"],
+            [L10n.utf8Standard, L10n.cp932Windows],
             target: self, action: #selector(encodingChanged(_:)),
             selected: Settings.compressEncoding == .cp932 ? 1 : 0)
         let cryptoSelection: Int
@@ -188,16 +189,16 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         case .zipCrypto: cryptoSelection = 2
         }
         let crypto = DizunRows.segmented(
-            ["なし", "AES-256", "ZipCrypto"],
+            [L10n.none, "AES-256", "ZipCrypto"],
             target: self, action: #selector(encryptionChanged(_:)),
             selected: cryptoSelection)
         return DizunRows.group([
-            DizunRows.row(label: "圧縮時のファイル名", controls: [
-                DizunRows.tintedHint("例）報告書.zip ／ 複数なら Archive.zip"),
+            DizunRows.row(label: L10n.archiveFileName, controls: [
+                DizunRows.tintedHint(L10n.archiveNameHint),
             ], tinted: true),
-            DizunRows.row(label: "ファイル名の文字コード", controls: [encoding], tinted: true),
-            DizunRows.row(label: "暗号化", controls: [crypto],
-                          hint: "二重ZIPで構成も隠す", tinted: true),
+            DizunRows.row(label: L10n.fileEncoding, controls: [encoding], tinted: true),
+            DizunRows.row(label: L10n.encryption, controls: [crypto],
+                          hint: L10n.nestedHint, tinted: true),
         ])
     }
 
@@ -211,20 +212,20 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         target.stringValue = Settings.optimizeTargetKB.map(String.init) ?? ""
         targetField = target
 
-        let backup = NSButton(checkboxWithTitle: "ゴミ箱へ残す",
+        let backup = NSButton(checkboxWithTitle: L10n.keepInTrash,
                               target: self, action: #selector(backupChanged(_:)))
         backup.state = Settings.optimizeBackupToTrash ? .on : .off
         backup.font = .systemFont(ofSize: 12)
         backup.attributedTitle = NSAttributedString(
-            string: "ゴミ箱へ残す",
+            string: L10n.keepInTrash,
             attributes: [.foregroundColor: NSColor.white, .font: NSFont.systemFont(ofSize: 12)])
 
         return DizunRows.group([
-            DizunRows.row(label: "長辺上限", controls: [edge, DizunRows.tintedLabel("px")],
-                          hint: "空欄でリサイズなし", tinted: true),
-            DizunRows.row(label: "目標サイズ", controls: [target, DizunRows.tintedLabel("KB以下")],
-                          hint: "空欄で指定なし", tinted: true),
-            DizunRows.row(label: "元画像", controls: [backup], tinted: true),
+            DizunRows.row(label: L10n.longEdgeLimit, controls: [edge, DizunRows.tintedLabel("px")],
+                          hint: L10n.blankNoResize, tinted: true),
+            DizunRows.row(label: L10n.targetSize, controls: [target, DizunRows.tintedLabel(L10n.kbOrLess)],
+                          hint: L10n.blankNone, tinted: true),
+            DizunRows.row(label: L10n.originals, controls: [backup], tinted: true),
         ], spacing: 12)
     }
 
