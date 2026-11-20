@@ -129,6 +129,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         field.isBezeled = false
         field.isBordered = true
         field.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        field.cell = DizunCenteredTextFieldCell(textCell: "")
         field.drawsBackground = true
         field.backgroundColor = .white
         field.textColor = .black

@@ -223,6 +223,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         name.isBezeled = false
         name.isBordered = true
         name.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        name.cell = DizunCenteredTextFieldCell(textCell: "")
         name.drawsBackground = true
         name.backgroundColor = .white
         name.textColor = .black
