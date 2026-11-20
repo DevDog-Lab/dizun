@@ -122,6 +122,11 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         field.placeholderString = "なし"
         field.font = .systemFont(ofSize: 12)
         field.bezelStyle = .roundedBezel
+        // White field, black text — readable over the dark panel and the
+        // standard look on the light settings window alike.
+        field.backgroundColor = .white
+        field.textColor = .black
+
         field.widthAnchor.constraint(equalToConstant: 52).isActive = true
         field.setContentHuggingPriority(.required, for: .horizontal)
         field.usesSingleLineMode = true

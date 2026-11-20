@@ -84,7 +84,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             [L10n.tabArchive, L10n.tabImages], target: self,
             action: #selector(settingsTabChanged(_:)), selected: 0)
         if #available(macOS 27.0, *) {
-            selector.role = .tabs
+            selector.role = .valueSelection
         }
         selector.segmentDistribution = .fill
         selector.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -216,6 +216,11 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         name.font = .systemFont(ofSize: 12)
         name.bezelStyle = .roundedBezel
         name.usesSingleLineMode = true
+        // Explicit white field with black text — over the dark panel the
+        // automatic glass look washes out.
+        name.backgroundColor = .white
+        name.textColor = .black
+
         name.delegate = self
         name.stringValue = Settings.archiveBaseName ?? ""
         nameField = name
