@@ -38,18 +38,12 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         window.center()
         window.collectionBehavior = [.moveToActiveSpace]
 
-        // Traffic lights: a touch larger and a touch lower than the default.
+        // Traffic lights sized to match the Orca reference (standard
+        // diameter), kept a touch lower than the default position.
         for button in [window.standardWindowButton(.closeButton),
                        window.standardWindowButton(.miniaturizeButton),
                        window.standardWindowButton(.zoomButton)].compactMap({ $0 }) {
-            var frame = button.frame
-            let scale: CGFloat = 1.18
-            let grown = NSSize(width: frame.width * scale, height: frame.height * scale)
-            // Keep the center-x, drop the center-y slightly.
-            frame.origin.x -= (grown.width - frame.width) / 2
-            frame.origin.y -= (grown.height - frame.height) / 2 + 3
-            frame.size = grown
-            button.frame = frame
+            button.frame.origin.y -= 3
         }
 
         // Brand wordmark (user-designed unzip/dizun rotation logo).
