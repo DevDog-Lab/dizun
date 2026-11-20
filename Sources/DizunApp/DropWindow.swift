@@ -44,8 +44,9 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
                 ?? Bundle.main.bundlePath + "/Contents/Resources/logo.png") ?? NSImage())
         let aspect = title.image?.size.height ?? 1 > 0
             ? (title.image!.size.width / max(title.image!.size.height, 1)) : 4
-        title.heightAnchor.constraint(equalToConstant: 52).isActive = true
-        title.widthAnchor.constraint(equalToConstant: 52 * aspect).isActive = true
+        // Sized to the window chrome: ~3x the close button's 12pt diameter.
+        title.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        title.widthAnchor.constraint(equalToConstant: 36 * aspect).isActive = true
         title.imageScaling = .scaleProportionallyUpOrDown
         _ = aspect
 
