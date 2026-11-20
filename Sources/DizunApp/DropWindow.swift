@@ -78,12 +78,11 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             dropStack.centerYAnchor.constraint(equalTo: drop.centerYAnchor),
         ])
 
-        // A full-width selector and its content share one panel. DizunTabs
-        // keeps readable contrast over the blue glass panel.
-        let selector = DizunTabs(labels: [L10n.tabArchive, L10n.tabImages], selected: 0)
-        selector.onSelect = { [weak self] index in
-            self?.switchPage(index)
-        }
+        // A full-width standard selector and its content share one panel.
+        let selector = DizunRows.segmented(
+            [L10n.tabArchive, L10n.tabImages], target: self,
+            action: #selector(settingsTabChanged(_:)), selected: 0)
+        selector.segmentDistribution = .fill
         selector.setContentHuggingPriority(.defaultLow, for: .horizontal)
         settingsPages = [zipTab(), imageTab()]
         settingsPages[1].isHidden = true
@@ -169,9 +168,9 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func switchPage(_ index: Int) {
-        for (pageIndex, page) in settingsPages.enumerated() {
-            page.isHidden = pageIndex != index
+    @objc private func settingsTabChanged(_ sender: NSSegmentedControl) {
+        for (index, page) in settingsPages.enumerated() {
+            page.isHidden = index != sender.selectedSegment
         }
         fitWindowToContent()
     }
@@ -188,28 +187,20 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
 
     /// One setting per row, aligned label column.
     private func zipTab() -> NSView {
-        let encoding = DizunTabs(
-            labels: [L10n.utf8Standard, L10n.cp932Windows],
+        let encoding = DizunRows.segmented(
+            [L10n.utf8Standard, L10n.cp932Windows],
+            target: self, action: #selector(encodingChanged(_:)),
             selected: Settings.compressEncoding == .cp932 ? 1 : 0)
-        encoding.onSelect = { index in
-            Settings.compressEncoding = index == 1 ? .cp932 : .utf8
-        }
         let cryptoSelection: Int
         switch Settings.compressEncryptionKind {
         case .none: cryptoSelection = 0
         case .aes256: cryptoSelection = 1
         case .zipCrypto: cryptoSelection = 2
         }
-        let crypto = DizunTabs(
-            labels: [L10n.none, "AES-256", "ZipCrypto"],
+        let crypto = DizunRows.segmented(
+            [L10n.none, "AES-256", "ZipCrypto"],
+            target: self, action: #selector(encryptionChanged(_:)),
             selected: cryptoSelection)
-        crypto.onSelect = { index in
-            switch index {
-            case 1: Settings.compressEncryptionKind = .aes256
-            case 2: Settings.compressEncryptionKind = .zipCrypto
-            default: Settings.compressEncryptionKind = .none
-            }
-        }
         return DizunRows.group([
             DizunRows.row(label: L10n.archiveFileName, controls: [
                 DizunRows.tintedHint(L10n.archiveNameHint),
@@ -248,6 +239,18 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     }
 
     // MARK: - Actions
+
+    @objc private func encodingChanged(_ sender: NSSegmentedControl) {
+        Settings.compressEncoding = sender.selectedSegment == 1 ? .cp932 : .utf8
+    }
+
+    @objc private func encryptionChanged(_ sender: NSSegmentedControl) {
+        switch sender.selectedSegment {
+        case 1: Settings.compressEncryptionKind = .aes256
+        case 2: Settings.compressEncryptionKind = .zipCrypto
+        default: Settings.compressEncryptionKind = .none
+        }
+    }
 
     @objc private func backupChanged(_ sender: NSButton) {
         Settings.optimizeBackupToTrash = sender.state == .on
