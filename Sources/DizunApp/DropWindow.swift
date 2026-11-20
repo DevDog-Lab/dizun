@@ -222,6 +222,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         // background painting): white fill, black text.
         name.isBezeled = false
         name.isBordered = true
+        name.heightAnchor.constraint(equalToConstant: 26).isActive = true
         name.drawsBackground = true
         name.backgroundColor = .white
         name.textColor = .black

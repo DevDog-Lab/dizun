@@ -128,6 +128,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         // bezel ignores background painting).
         field.isBezeled = false
         field.isBordered = true
+        field.heightAnchor.constraint(equalToConstant: 26).isActive = true
         field.drawsBackground = true
         field.backgroundColor = .white
         field.textColor = .black
