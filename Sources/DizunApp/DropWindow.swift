@@ -82,6 +82,9 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         let selector = DizunRows.segmented(
             [L10n.tabArchive, L10n.tabImages], target: self,
             action: #selector(settingsTabChanged(_:)), selected: 0)
+        if #available(macOS 27.0, *) {
+            selector.role = .tabs
+        }
         selector.segmentDistribution = .fill
         selector.setContentHuggingPriority(.defaultLow, for: .horizontal)
         settingsPages = [zipTab(), imageTab()]
@@ -96,7 +99,9 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         panel.titlePosition = .noTitle
         panel.borderWidth = 1
         panel.borderColor = NSColor.white.withAlphaComponent(0.6)
-        panel.fillColor = NSColor.white.withAlphaComponent(0.12)
+        // A matte blue backing gives the system selection lens a darker ground.
+        panel.fillColor = NSColor(srgbRed: 0x3B / 255, green: 0x6D / 255,
+                                  blue: 0xA6 / 255, alpha: 1)
         panel.cornerRadius = 10
         panel.contentViewMargins = .zero
         let panelContent = panel.contentView!
@@ -201,6 +206,10 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             [L10n.none, "AES-256", "ZipCrypto"],
             target: self, action: #selector(encryptionChanged(_:)),
             selected: cryptoSelection)
+        if #available(macOS 27.0, *) {
+            encoding.role = .valueSelection
+            crypto.role = .valueSelection
+        }
         return DizunRows.group([
             DizunRows.row(label: L10n.archiveFileName, controls: [
                 DizunRows.tintedHint(L10n.archiveNameHint),
