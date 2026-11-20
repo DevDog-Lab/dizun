@@ -214,13 +214,14 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 180, height: 24))
         name.placeholderString = L10n.archiveNameHint
         name.font = .systemFont(ofSize: 12)
-        name.bezelStyle = .roundedBezel
         name.usesSingleLineMode = true
-        // Explicit white field with black text — over the dark panel the
-        // automatic glass look washes out.
+        // Classic bordered field (not the Liquid Glass bezel, which ignores
+        // background painting): white fill, black text.
+        name.isBezeled = false
+        name.isBordered = true
+        name.drawsBackground = true
         name.backgroundColor = .white
         name.textColor = .black
-        name.drawsBackground = true
 
         name.delegate = self
         name.stringValue = Settings.archiveBaseName ?? ""

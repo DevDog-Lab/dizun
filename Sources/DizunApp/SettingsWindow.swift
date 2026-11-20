@@ -121,12 +121,13 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 52, height: 24))
         field.placeholderString = "なし"
         field.font = .systemFont(ofSize: 12)
-        field.bezelStyle = .roundedBezel
-        // White field, black text — readable over the dark panel and the
-        // standard look on the light settings window alike.
+        // Classic bordered field: white fill, black text (the Liquid Glass
+        // bezel ignores background painting).
+        field.isBezeled = false
+        field.isBordered = true
+        field.drawsBackground = true
         field.backgroundColor = .white
         field.textColor = .black
-        field.drawsBackground = true
 
         field.widthAnchor.constraint(equalToConstant: 52).isActive = true
         field.setContentHuggingPriority(.required, for: .horizontal)
