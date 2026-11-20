@@ -6,7 +6,15 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-swift build -c release --product DizunApp
+# swiftbuild writes the deployment target into the Mach-O SDK field, which
+# makes macOS pick the legacy 12pt window chrome. Record the real SDK
+# (swift-build #1887); verify before assembling the bundle.
+DIZUN_SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)
+swift build -c release --product DizunApp \
+  -Xlinker -platform_version -Xlinker macos \
+  -Xlinker 14.0 -Xlinker "$DIZUN_SDK_VERSION"
+vtool -show-build .build/release/DizunApp 2>/dev/null | grep -q "sdk $DIZUN_SDK_VERSION" \
+  || { echo "LINK SDK metadata wrong (expected sdk $DIZUN_SDK_VERSION); refusing to install" >&2; exit 1; }
 
 APP="build/Dizun.app"
 rm -rf "$APP"
@@ -27,7 +35,7 @@ codesign --force --sign - "$APP" >/dev/null 2>&1 \
 # newer than every source file that feeds it.
 NEWEST_SRC=$(find Sources scripts/app -type f -newer .build/release/DizunApp 2>/dev/null | head -1)
 if [ -n "$NEWEST_SRC" ]; then
-  echo "stale release build detected ($NEWEST_SRC newer); run: swift build -c release --product DizunApp" >&2
+  echo "stale release build detected ($NEWEST_SRC newer); rerun swift build" >&2
   exit 1
 fi
 
