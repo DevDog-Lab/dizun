@@ -220,6 +220,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         // automatic glass look washes out.
         name.backgroundColor = .white
         name.textColor = .black
+        name.drawsBackground = true
 
         name.delegate = self
         name.stringValue = Settings.archiveBaseName ?? ""

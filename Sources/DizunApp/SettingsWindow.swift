@@ -126,6 +126,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         // standard look on the light settings window alike.
         field.backgroundColor = .white
         field.textColor = .black
+        field.drawsBackground = true
 
         field.widthAnchor.constraint(equalToConstant: 52).isActive = true
         field.setContentHuggingPriority(.required, for: .horizontal)
