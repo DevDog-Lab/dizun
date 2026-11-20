@@ -241,9 +241,10 @@ final class WorkCoordinator {
             throw DizunError.ioFailure("対象がありません")
         }
         let folder = first.deletingLastPathComponent()
-        let stem = files.count == 1
-            ? first.deletingPathExtension().lastPathComponent
-            : "Archive"
+        let stem = Settings.archiveBaseName
+            ?? (files.count == 1
+                ? first.deletingPathExtension().lastPathComponent
+                : "Archive")
         var candidate = folder.appendingPathComponent(stem + ".zip")
         var n = 2
         while FileManager.default.fileExists(atPath: candidate.path) {

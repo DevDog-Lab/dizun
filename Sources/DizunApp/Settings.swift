@@ -64,6 +64,24 @@ enum Settings {
         }
     }
 
+    /// Manual archive base name; nil = automatic naming (item name /
+    /// Archive). Stored without the .zip extension.
+    static var archiveBaseName: String? {
+        get {
+            guard let raw = defaults.string(forKey: "archiveBaseName"),
+                  !raw.isEmpty else { return nil }
+            return raw
+        }
+        set {
+            if let trimmed = newValue?.trimmingCharacters(in: .whitespaces),
+               !trimmed.isEmpty {
+                defaults.set(trimmed, forKey: "archiveBaseName")
+            } else {
+                defaults.removeObject(forKey: "archiveBaseName")
+            }
+        }
+    }
+
     /// UI language: "system" (default), "ja" or "en".
     static var languageRaw: String {
         get { defaults.string(forKey: "language") ?? "system" }

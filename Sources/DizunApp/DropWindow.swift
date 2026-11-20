@@ -10,6 +10,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     private var window: NSWindow?
     private var edgeField: NSTextField?
     private var targetField: NSTextField?
+    private var nameField: NSTextField?
     private var settingsPages: [NSView] = []
     private var contentStack: NSStackView?
     private var resultLabel = NSTextField(wrappingLabelWithString: "")
@@ -210,10 +211,16 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             encoding.role = .valueSelection
             crypto.role = .valueSelection
         }
+        let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 180, height: 24))
+        name.placeholderString = L10n.archiveNameHint
+        name.font = .systemFont(ofSize: 12)
+        name.bezelStyle = .roundedBezel
+        name.usesSingleLineMode = true
+        name.delegate = self
+        name.stringValue = Settings.archiveBaseName ?? ""
+        nameField = name
         return DizunRows.group([
-            DizunRows.row(label: L10n.archiveFileName, controls: [
-                DizunRows.tintedHint(L10n.archiveNameHint),
-            ], tinted: true),
+            DizunRows.row(label: L10n.archiveFileName, controls: [name], tinted: true),
             DizunRows.row(label: L10n.fileEncoding, controls: [encoding], tinted: true),
             DizunRows.row(label: L10n.encryption, controls: [crypto],
                           hint: L10n.nestedHint, tinted: true),
@@ -266,8 +273,12 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     }
 
     func controlTextDidChange(_ notification: Notification) {
-        guard let field = notification.object as? NSTextField,
-              field == edgeField || field == targetField else { return }
+        guard let field = notification.object as? NSTextField else { return }
+        if field == nameField {
+            Settings.archiveBaseName = field.stringValue
+            return
+        }
+        guard field == edgeField || field == targetField else { return }
         let digits = SettingsWindowController.sanitize(field.stringValue)
         if digits != field.stringValue {
             field.stringValue = digits
