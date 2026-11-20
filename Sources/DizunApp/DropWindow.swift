@@ -26,25 +26,17 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
                               styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
-        // No title-bar text (the in-window DIZUN carries the brand); paint
-        // the whole window, titlebar included, in the brand blue.
+        // Fully standard chrome: standard titlebar, standard 14px traffic
+        // lights, exactly like every other app. (The earlier edge-to-edge
+        // blue needed a transparent titlebar, which switches macOS to its
+        // compact 12px button set — the "smaller than other apps" look.)
         window.title = ""
-        window.titlebarAppearsTransparent = true
-        window.styleMask.insert(.fullSizeContentView)
         window.backgroundColor = NSColor(srgbRed: 0x4F / 255, green: 0x91 / 255,
                                          blue: 0xDD / 255, alpha: 1)
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
         window.collectionBehavior = [.moveToActiveSpace]
-
-        // Traffic lights sized to match the Orca reference (standard
-        // diameter), kept a touch lower than the default position.
-        for button in [window.standardWindowButton(.closeButton),
-                       window.standardWindowButton(.miniaturizeButton),
-                       window.standardWindowButton(.zoomButton)].compactMap({ $0 }) {
-            button.frame.origin.y -= 3
-        }
 
         // Brand wordmark (user-designed unzip/dizun rotation logo).
         let title = NSImageView(image: NSImage(contentsOfFile:
