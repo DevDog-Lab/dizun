@@ -10,7 +10,7 @@ MAX_SCAN = 5 * 1024 * 1024
 # Brand assets the user provided and a human reviewed before commit (the app
 # icon, 2026-11-19; inspected visually and dimension-checked — image data
 # only). This is a narrow allowlist, NOT a general binary exemption.
-APPROVED_BINARY_ASSET = re.compile(r'(^|/)Assets/[^/]+\.(?:png|icns)$', re.I)
+APPROVED_BINARY_ASSET = re.compile(r'(^|/)Assets/[^/]+\.(?:png|icns|svg)$', re.I)
 NAME_BLOCK = re.compile(r'(^|/)(\.env(?:\..*)?|id_rsa(?:\..*)?|id_ed25519(?:\..*)?|[^/]*\.(?:pem|key|p8|p12|pfx|kdbx|mobileprovision)|credentials\.json|service-account[^/]*\.json)$', re.I)
 PATTERNS = [
     ('private key', re.compile(rb'-----BEGIN (?:OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----')),

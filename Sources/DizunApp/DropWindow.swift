@@ -38,10 +38,16 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         window.center()
         window.collectionBehavior = [.moveToActiveSpace]
 
-        let title = NSTextField(labelWithString: "DIZUN")
-        title.font = .boldSystemFont(ofSize: 22)
-        title.alignment = .left
-        title.textColor = .white
+        // Brand wordmark (user-designed unzip/dizun rotation logo).
+        let title = NSImageView(image: NSImage(contentsOfFile:
+            Bundle.main.path(forResource: "logo", ofType: "png")
+                ?? Bundle.main.bundlePath + "/Contents/Resources/logo.png") ?? NSImage())
+        let aspect = title.image?.size.height ?? 1 > 0
+            ? (title.image!.size.width / max(title.image!.size.height, 1)) : 4
+        title.heightAnchor.constraint(equalToConstant: 52).isActive = true
+        title.widthAnchor.constraint(equalToConstant: 52 * aspect).isActive = true
+        title.imageScaling = .scaleProportionallyUpOrDown
+        _ = aspect
 
         // ZIP / image / anything-else routing in one calm sentence.
         let drop = DropView()

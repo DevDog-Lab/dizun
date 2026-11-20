@@ -16,6 +16,9 @@ cp scripts/app/Info.plist "$APP/Contents/Info.plist"
 if [ -f Assets/AppIcon.icns ]; then
   cp Assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
+if [ -f Assets/logo.png ]; then
+  cp Assets/logo.png "$APP/Contents/Resources/logo.png"
+fi
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 codesign --force --sign - "$APP" >/dev/null 2>&1 \
   || codesign --force --sign - "$APP"
