@@ -1,5 +1,14 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-20 — 第45回: プレースホルダー復活（attributed placeholder）
+
+- ユーザー報告: 白地化した入力欄でプレースホルダー（薄い説明文）が消えている。
+- 原因: クラシック枠付き+drawsBackground構成では`placeholderString`が描画されない（Liquid Glassの挙動）。
+- 対応: `placeholderAttributedString`（11pt・systemGray）に切り替え。ファイル名欄=「例）報告書.zip ／ 複数なら Archive.zip」、数値欄=「なし」。英語表示にも対応（L10n経由）。
+- 検証: 警告0・25/25・インストール済み。ユーザー実機確認待ち。
+- コミット: （本コミット）
+
+
 ## 2026-11-20 — 第44回: 入力欄白地化の完成（クラシック枠付きフィールド）
 
 - 経緯: 第43回の`drawsBackground=true`でも、**Liquid Glass（macOS 27）は`.roundedBezel`の背景描画を無視**し白くならない（実機キャプチャのピクセル計測で白色帯なしを確認）。

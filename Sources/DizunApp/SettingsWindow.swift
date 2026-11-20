@@ -119,8 +119,11 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
 
     nonisolated static func digitsField() -> NSTextField {
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 52, height: 24))
-        field.placeholderString = "なし"
         field.font = .systemFont(ofSize: 12)
+        field.placeholderAttributedString = NSAttributedString(
+            string: "なし",
+            attributes: [.font: NSFont.systemFont(ofSize: 11),
+                         .foregroundColor: NSColor.systemGray])
         // Classic bordered field: white fill, black text (the Liquid Glass
         // bezel ignores background painting).
         field.isBezeled = false

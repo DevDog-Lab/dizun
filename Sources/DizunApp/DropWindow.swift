@@ -212,8 +212,11 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             crypto.role = .valueSelection
         }
         let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 180, height: 24))
-        name.placeholderString = L10n.archiveNameHint
         name.font = .systemFont(ofSize: 12)
+        name.placeholderAttributedString = NSAttributedString(
+            string: L10n.archiveNameHint,
+            attributes: [.font: NSFont.systemFont(ofSize: 11),
+                         .foregroundColor: NSColor.systemGray])
         name.usesSingleLineMode = true
         // Classic bordered field (not the Liquid Glass bezel, which ignores
         // background painting): white fill, black text.
