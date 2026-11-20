@@ -31,6 +31,8 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         // blue needed a transparent titlebar, which switches macOS to its
         // compact 12px button set — the "smaller than other apps" look.)
         window.title = ""
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
         window.backgroundColor = NSColor(srgbRed: 0x4F / 255, green: 0x91 / 255,
                                          blue: 0xDD / 255, alpha: 1)
         window.delegate = self
