@@ -117,26 +117,34 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate {
             .filter { $0.isASCII && $0.isNumber })
     }
 
-    nonisolated static func digitsField() -> NSTextField {
+    static func digitsField() -> NSTextField {
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 52, height: 24))
+        // Swap the centered cell in FIRST, then configure everything.
+        // A later swap drops isEditable/isBordered/font/placeholder set on
+        // the previous cell (the bare textCell init defaults to
+        // editable=false — that is what broke editing last build).
+        field.cell = DizunCenteredTextFieldCell(textCell: "")
+        field.isEditable = true
+        field.isSelectable = true
         field.font = .systemFont(ofSize: 12)
         field.placeholderAttributedString = NSAttributedString(
             string: "なし",
             attributes: [.font: NSFont.systemFont(ofSize: 11),
                          .foregroundColor: NSColor.systemGray])
+        field.usesSingleLineMode = true
+        field.cell?.isScrollable = true
+        field.lineBreakMode = .byClipping
         // Classic bordered field: white fill, black text (the Liquid Glass
         // bezel ignores background painting).
         field.isBezeled = false
         field.isBordered = true
-        field.heightAnchor.constraint(equalToConstant: 26).isActive = true
-        field.cell = DizunCenteredTextFieldCell(textCell: "")
         field.drawsBackground = true
         field.backgroundColor = .white
         field.textColor = .black
 
+        field.heightAnchor.constraint(equalToConstant: 26).isActive = true
         field.widthAnchor.constraint(equalToConstant: 52).isActive = true
         field.setContentHuggingPriority(.required, for: .horizontal)
-        field.usesSingleLineMode = true
         return field
     }
 }

@@ -1,5 +1,39 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-21 — 第49回: 入力欄の垂直中央と計測方式の根本修正（Codex担当）
+
+- ユーザー実機指摘2件（第48回ビルドに対して）: (1)ファイル名欄の幅が短い・中途半端・バランス悪い (2)文字がフィールド上端にくっつく。**5回連続の見た目未達のためユーザー指示でCodexへ設計・実装を委譲**（run_5b5c6612fb22 / dispatch ctx_02c60081e97f。週次13%で投入）。
+- **Codexが特定した第48回の根本誤り**: `super.drawingRect(forBounds:)` は自然な文字高を返さず**内側全面の矩形 (1,1,178,24)** を返す（AppKitスニペット実証）。旧実装はこれを自然高と誤認して中央化計算→`super.drawInterior`へ渡す際に二重インセットがかかり、**文字は上寄せのまま背景だけ中央に縮んでいた**。実機撮影でも上余白4px/下余白9pxで上寄せを再現。
+- **「実機で白地157pxに縮む」は計測アーティファクトと判明**: 第48回の私の計測（band内全行で白い列の共通範囲）は文字で途切れる走査線の影響で白地幅を過小評価した。連結成分/最長白ラン方式では提供の実機画像も白地178px。以後の白地計測は連結成分方式を正とする。
+- Codex実装: セルをfont metrics（ascender/capHeight/descender）から固定ベースラインを構成する設計に全面変更。プレースホルダーは自身のグリフ境界（`.usesDeviceMetrics`）で中央配置。説明文を11pt→**10pt**へ（180pt内に全文収まる。実測字幅170.74pt vs テキスト領域174pt）。3欄に`isScrollable`+`byClipping`（長い入力の横スクロール）。
+- Claude Code側の独立検証（警告0・25/25・インストール・起動・改善版計測・実キー入力）:
+  - ファイル名欄: **白地178×24px（枠込み180×26pt）、文字余白8/7px（上下差1px）**
+  - 数値欄×2: **白地50×24px（枠込み52×26pt）、文字余白7/7px（完全に等しい）**
+  - 実キー入力"7"→`defaults`の`archiveBaseName`へ即時保存を確認→掃除済み
+  - Codex報告では1倍/Retina 2倍の両画面で同一pt寸法も確認済み
+- 残るユーザー実機確認: 10pt説明文の読みやすさ、上下最大1pxの中心偏差の受入れ。180pt幅そのものが「短い」という美的判断の場合は仕様幅の変更が別途必要（今回の計測では幅は仕様どおり出ている）。
+- コミット: ユーザー実機確認後（第48・49回分をまとめて実施予定）。
+
+
+## 2026-11-21 — 第48回: 入力欄「入力できない」不具合の修正（cell差し替え順序）
+
+- ユーザー報告4件: (1)ファイル名欄・数値欄に入力できない (2)変な文字が残留表示 (3)プレースホルダー非表示 (4)ファイル名欄の幅が短い。
+- **原因特定**（スニペット実証つき）: 第47回の`DizunCenteredTextFieldCell`差し替えが、プロパティ設定の**後**に行われていた。`NSTextField`の`isEditable`/`isBordered`/`font`/`placeholderAttributedString`はcell側に保持されるため、`NSTextFieldCell(textCell:)`（既定editable=false/bezeled=false/bordered=false）への差し替えで全て失われていた。壊していたのはセルの中央寄せロジックではなく差し替え順序。
+- 対応:
+  - cell差し替えを**最初**に移動し、全プロパティ（isEditable/isSelectable/isBordered/font/placeholder等）を差し替え後に明示設定（DropWindow・SettingsWindow両方）
+  - ファイル名欄に`widthAnchor 180pt`制約を追加（編集可能フィールドはintrinsic sizeでframe幅が無視される。第20回の数値欄52ptと同じ対策）
+  - 白地が15pxに縮む描画問題を修正: クラシックセルは背景・枠の描画にも`drawingRect`を使うため、オーバーライドが白地をテキスト高まで縮めていた。`draw(withFrame:in:)`で白背景+枠を**全面に自前描画**し、テキスト内部のみ中央矩形で描く設計に強化
+  - `digitsField()`の`nonisolated`を解除し`DropletWindowController`に`@MainActor`を付与 — 潜在していたactor-isolated警告32件を0件化（第47回の「警告0」は増分ビルドで旧警告が見えていないだけだった）
+- defaults掃除: テスト残留`archiveBaseName="亜slkdファj"`を削除。`optimizeMaxDimension=1280`/`optimizeTargetKB=200`は正当値のため保護。
+- **実機検証（orca computer + 実キー入力）**:
+  - ファイル名欄: 白地24px+枠込み26pt・幅180pt（AXFrame 182pt）・プレースホルダー「例）報告書.zip…」が帯の中央に表示（ピクセル計測）・AX上settable・AXReplaceSelectionがverified
+  - 実キー入力"34"→Value更新→**defaultsのarchiveBaseNameへ即時保存**（fieldEditor→controlTextDidChange→Settingsのfull chain実証）
+  - 数値欄2つ: 白地50px+枠で52pt幅×26pt高さ・値1280/200表示・実キー入力"999"追記→sanitize（5桁制限）→defaults保存を確認
+  - テスト値は全て掃除し1280/200へ復元済み
+- 検証: 警告0・25/25・インストール済み。エンジン無変更。
+- コミット: ユーザーの実機確認後（前スレッド教訓: UI変更は確認前にコミットしない）。
+
+
 ## 2026-11-20 — 第47回: 入力欄テキストの上下センター化
 
 - ユーザー指摘: 入力欄の中の文字が上にくっついている。上下の隙間を同じに。

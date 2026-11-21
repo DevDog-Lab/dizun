@@ -5,6 +5,7 @@ import Foundation
 /// The plain-launch window: explains what DIZUN does and accepts drops.
 /// ZIPs are extracted, images are optimized, everything else is compressed.
 /// Settings live in two tabs so ZIP and image concerns stay separate.
+@MainActor
 final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     private let coordinator: WorkCoordinator
     private var window: NSWindow?
@@ -212,21 +213,36 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             crypto.role = .valueSelection
         }
         let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 180, height: 24))
+        // Swap the centered cell in FIRST, then configure everything.
+        // NSTextField forwards isEditable/isBordered/font/placeholder to
+        // its cell, so a later swap drops every earlier setting (the bare
+        // textCell init defaults to editable=false — that is what broke
+        // editing and hid the placeholder in the previous build).
+        name.cell = DizunCenteredTextFieldCell(textCell: "")
+        name.isEditable = true
+        name.isSelectable = true
         name.font = .systemFont(ofSize: 12)
+        // The complete Japanese hint is ~170pt at 10pt, fitting the 174pt
+        // text area of the required 180pt field. Entered text stays 12pt.
         name.placeholderAttributedString = NSAttributedString(
             string: L10n.archiveNameHint,
-            attributes: [.font: NSFont.systemFont(ofSize: 11),
+            attributes: [.font: NSFont.systemFont(ofSize: 10),
                          .foregroundColor: NSColor.systemGray])
         name.usesSingleLineMode = true
+        name.cell?.isScrollable = true
+        name.lineBreakMode = .byClipping
         // Classic bordered field (not the Liquid Glass bezel, which ignores
         // background painting): white fill, black text.
         name.isBezeled = false
         name.isBordered = true
-        name.heightAnchor.constraint(equalToConstant: 26).isActive = true
-        name.cell = DizunCenteredTextFieldCell(textCell: "")
         name.drawsBackground = true
         name.backgroundColor = .white
         name.textColor = .black
+        name.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        // An editable field's intrinsic size ignores its frame under Auto
+        // Layout — pin the width explicitly (same as the digits fields).
+        name.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        name.setContentHuggingPriority(.required, for: .horizontal)
 
         name.delegate = self
         name.stringValue = Settings.archiveBaseName ?? ""
