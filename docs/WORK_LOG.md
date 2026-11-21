@@ -1,5 +1,15 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-21 — 第50回: README拡充・初push・LP設計プロンプト
+
+- ユーザー指示: 現状のまま運用するためコミットし、GitHubの説明文を充実させてpush。あわせてdevdog-lab.com用の製品ページ設計をプロンプト化。
+- コミット: `dd8b1f6`（第48・49回の入力欄修正）、`0e1eefb`（README拡充）。
+- README: 実装済み機能（ZIP/暗号化/画像最適化/Finder統合/安全性）と検証状況（Windows実機未検証・未配布）を分けて明記する構成に全面書き換え。
+- **初push実施**（ユーザー明示指示）: 事前検査として`repo_guard.py history`（308項目・findings 0）・gitleaks全履歴スキャン（56コミット・漏洩なし）・`git remote -v`（トークンなしURL確認）を実施後、`main -> main`（新規）をpush。`.githooks/pre-push`の承認変数を単発で設定。
+- LP設計プロンプト: `docs/LANDING_PAGE_PROMPT.md`を作成。devdog-lab-site（Astro）の既存4製品（Combox/Melo/Clatch/Honyac）の実装パターン（pages/ja|en/<product>/・content/<product>.ts コピー集約・brands/ogアセット・トップ登録）を調査して踏襲要件化。DIZUNのファクト（verified only）・ステータス表記の制約（未配布・Windows実機未検証・タグライン未確定）・ブランド要件（#4F91DD/#3B6DA6・回転アニメ・reduced-motion尊重）・スクリーンショット撮影手順（窓限定）・検収条件を含む。実装は専用リポジトリ（devdog-lab-site）で別担当が行う。
+- 本コミット（WORK_LOG第50回+LPプロンプト）はローカルのみ。push承認は単発のため、追加pushには改めて指示が必須。
+
+
 ## 2026-11-21 — 第49回: 入力欄の垂直中央と計測方式の根本修正（Codex担当）
 
 - ユーザー実機指摘2件（第48回ビルドに対して）: (1)ファイル名欄の幅が短い・中途半端・バランス悪い (2)文字がフィールド上端にくっつく。**5回連続の見た目未達のためユーザー指示でCodexへ設計・実装を委譲**（run_5b5c6612fb22 / dispatch ctx_02c60081e97f。週次13%で投入）。
