@@ -7,6 +7,16 @@ let package = Package(
     targets: [
         // UI-independent ZIP engine. No AppKit, no network, no third-party code.
         .target(name: "DizunCore"),
+        // Vendored non-ZIP engine (tar/7z/RAR/LZH). Built from pinned sources
+        // by scripts/vendor/build-vendor.sh; regenerate before building.
+        .binaryTarget(name: "LibarchiveXCF", path: "vendor/libarchive.xcframework"),
+        .binaryTarget(name: "LiblzmaXCF", path: "vendor/liblzma.xcframework"),
+        // C shim: exposes libarchive headers and links the system codecs.
+        .target(name: "CArchive",
+                dependencies: ["LibarchiveXCF", "LiblzmaXCF"],
+                path: "Sources/CArchive"),
+        // Swift wrapper over libarchive for the multi-format adapters.
+        .target(name: "DizunArchive", dependencies: ["CArchive", "DizunCore"]),
         // System-zlib shim (Apple-shipped library; PNG recompression needs
         // level control the Compression framework does not expose).
         .systemLibrary(name: "CZlib", path: "Sources/CZlib"),

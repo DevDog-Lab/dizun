@@ -6,6 +6,12 @@
 set -eu
 cd "$(dirname "$0")/.."
 
+# The multi-format engine needs the vendored XCFrameworks; build them from
+# the pinned research clones when missing (clean checkouts).
+if [ ! -d vendor/libarchive.xcframework ] || [ ! -d vendor/liblzma.xcframework ]; then
+    ./scripts/vendor/build-vendor.sh
+fi
+
 # swiftbuild writes the deployment target into the Mach-O SDK field, which
 # makes macOS pick the legacy 12pt window chrome. Record the real SDK
 # (swift-build #1887); verify before assembling the bundle.

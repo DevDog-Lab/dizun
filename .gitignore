@@ -48,3 +48,6 @@ logs/
 *.db
 coverage/
 node_modules/
+
+# Vendored engine build outputs (regenerate via scripts/vendor/build-vendor.sh)
+/vendor/

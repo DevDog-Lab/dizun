@@ -2,7 +2,41 @@
 
 ## Current status
 
-このリポジトリには現時点で**第三者のコード・バイナリは含まれていない**。依存関係はAppleプラットフォームのフレームワーク（Foundation / Compression / CryptoKit・テストのみ）に限る。
+DIZUNCore（ZIPエンジン）とDizunImage（画像最適化）は第三者コードを含まない。**多形式対応（tar・7z・RAR受信・LZH受信）のために、ビルド成果物として libarchive と liblzma を同梱する**（下記「Vendored binaries」）。ソースコードの複製は行わない。
+
+## Vendored binaries（多形式エンジン・静的リンク）
+
+ビルド成果物（`vendor/*.xcframework`）はGit管理外。`scripts/vendor/build-vendor.sh` が監査済みの固定リビジョンから再生成する。`vendor/manifest.txt` に取得物のSHA-256を記録する。
+
+```text
+Component: libarchive
+Upstream: https://github.com/libarchive/libarchive
+Revision: 432ab464725aa99c53de7572979bd9bbbf382ed1 (2026-11-16監査)
+Integration: static (archive_static), arm64, macOS 14.0, scripts/vendor/build-vendor.sh
+Linked subset: tar / 7zip / rar / rar5 / lha readers+writers via列挙登録, zlib+bzip2+liblzma のみ有効
+  (LIBB2/LZ4/ZSTD/LZO/OpenSSL/mbedTLS/Nettle/XML/PCRE はOFF。/opt/homebrew 参照をCMakeCacheで拒否)
+Licenses: COPYING — 全体はBSD-2-Clause風だがファイル単位で例外:
+  - libarchive/* の大部分: BSD-2-Clause系
+  - compress reader/writer, mtree.5: UC Regents 3-clause BSD
+  - archive_parse_date.c 等: public domain
+  - BLAKE2 (blake2sp*): CC0 / OpenSSL / Apache-2.0 のトリプルライセンス → CC0を選択
+Dependencies: Apple SDK の libz.tbd / libbz2.tbd、下記 liblzma
+Verified: 上流テスト・交叉検証は docs/WORK_LOG.md の該当回に記録
+```
+
+```text
+Component: liblzma (XZ Utils)
+Upstream: https://github.com/tukaani-project/xz
+Revision: v5.8.4 d3e650e63c110e830fd5391e7f8b45df0b91d3da
+Integration: static (liblzma.a), arm64, macOS 14.0, scripts/vendor/build-vendor.sh
+Linked subset: liblzma ライブラリのみ（CLI・スクリプト類はビルドしない）
+Licenses: liblzma は BSD Zero Clause License (0BSD) — COPYING.0BSD
+  （同梱するのは liblzma のみであり、GPL/LGPL系ファイルは含まない）
+Dependencies: なし（Apple SDK のみ）
+Verified: libarchive 交叉検証時に合同で確認（docs/WORK_LOG.md 記録）
+```
+
+配布時は About 画面・リソースから本書を開けるようにする。BLAKE2のライセンス選択（CC0）は採用ファイル冒頭と再照合のうえ確定する。
 
 ## Design references（コード複製なし・出所明示）
 
