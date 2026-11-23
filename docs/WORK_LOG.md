@@ -1,5 +1,21 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-23 — 第52回: 多形式エンジン実装（libarchive統合・tar/7z/LZH/RAR5受信）
+
+- **libarchive+liblzma vendoring**（0df2291）: xz v5.8.4(0BSD)・libarchive(監査SHA固定)を依存完全固定で静的ビルド→XCFramework→SwiftPM binaryTarget+CArchive shim（`link z/bz2/iconv`）。CMakeCacheの`/opt/homebrew`**ライブラリ参照を検査で拒否**（ツール類のパスは除外）。`scripts/vendor/build-vendor.sh`が再生成、vendor/はgit管理外、manifest.txtにSHA-256記録。THIRD_PARTY_NOTICESに台帳追記。
+  - **libarchive上流テスト 1152/1152合格**（ENABLE_TEST=ON別構成・依存同一固定）。
+- **DizunArchiveターゲット**（fcaaf7d・95c4342）: FormatDetector（マジックバイト判定・tar checksum検証・gzip/bz2/xzの中身tar解決）、LibarchiveArchive（形式列挙登録・`support_format_all`禁止・エントリ即時コピー・PathSafety・ExtractionLimits予算・O_EXCL書込・collisionKeyユニーク名・quarantine継承・失敗時cleanup台帳・7zの親dirオンデマンド作成）、LibarchiveWriter（pax出力・.part排他確定・ジャンク除外・symlink/特殊ファイルスキップ）。UTF-8ロケールshim（C localeでは日本語名が"untranslatable"になるlibarchiveのsconv対策）。
+- CLI: `pack --format tar|tar.gz|tar.bz2|tar.xz|7z`、`unpack`/`list`の非ZIP自動分岐。
+- **検証結果**:
+  - tar/tar.gz/tar.bz2/tar.xz/7z: 作成→解凍→`diff -r`完全一致。`/usr/bin/tar`での読取一致、7zは7zz `t`・`x`交叉一致
+  - LZH: libarchive fixture（lh0/lh6/lh7/bugfix）解凍OK。**CP932日本語ファイル名「漢字.txt」「表.txt」が正しく復号**
+  - RAR5: libarchive fixture（compressed/multiple_files/solid）list/extract OK。**7zzのRAR5デコーダとは合わないfixtureがある点を記録**（対応表のRAR5は「libarchive実装範囲」と注記する）
+  - 分割RAR: part1単体は解析が始まる。巻の完結性を検出して説明付きで拒否する丁寧さは今後課題
+  - 既存ZIP 25/25維持・警告0
+- 既知の未完了: LZH level0のCP932 fixtureで「漢字.txt」がディレクトリとして復元される（libarchiveのMS-DOS属性ビット判定に従った結果。実運用データで問題が出たら再調査）。分割/暗号化RAR・暗号化7zの明示拒否メッセージ、helper process隔離、専用出力領域→検証→確定の完全形は未実装（T9敵対試験で対応）。
+- 残作業: UI統合（形式popup・プレビュー・Finder/L10n）→敵対試験→文書更新。
+
+
 ## 2026-11-23 — 第51回: 多形式対応の設計採択（Codex設計相談）
 
 - ユーザー要求: ZIP以外の圧縮形式対応・圧縮解凍アプリとして充実・デザインもプロ意識を持って。
