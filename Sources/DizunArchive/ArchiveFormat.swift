@@ -103,12 +103,13 @@ public enum FormatDetector {
         return nil
     }
 
-    /// LHA level-1 header: size byte, method "-lh?-", … (levels 2/3 start
-    /// with a size byte of 0x00/0x20 followed by their own layout).
+    /// LHA level-0/1 header: size byte, checksum byte, method "-lh?-"
+    /// (level 2/3 headers start with 0x00/0x20 and shift the method
+    /// further out; libarchive still reads them once detected).
     static func looksLikeLHA(_ b: [UInt8]) -> Bool {
-        guard b.count >= 5 else { return false }
-        let method = String(decoding: b[1..<5], as: UTF8.self)
-        return b[0] > 0 && method.hasPrefix("-lh")
+        guard b.count >= 6 else { return false }
+        let method = String(decoding: b[2..<6], as: UTF8.self)
+        return b[0] >= 0x18 && method.hasPrefix("-lh")
     }
 
     /// Old (pre-ustar) tar: verify the octal checksum field.
