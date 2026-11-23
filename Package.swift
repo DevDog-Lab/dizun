@@ -26,7 +26,8 @@ let package = Package(
         // the XCTest suite and the `dizun selftest` CLI. Not part of the app.
         .target(name: "DizunFixtures", dependencies: ["DizunCore", "DizunImage"]),
         // Manual verification CLI: pack / unpack / list / optimize / selftest.
-        .executableTarget(name: "dizun", dependencies: ["DizunCore", "DizunImage", "DizunFixtures"]),
+        .executableTarget(name: "dizun",
+                          dependencies: ["DizunCore", "DizunImage", "DizunFixtures", "DizunArchive"]),
         // Finder-facing app shell: archive-open extraction, Services, droplet.
         // Packaged into Dizun.app by scripts/build-app.sh.
         .executableTarget(name: "DizunApp", dependencies: ["DizunCore", "DizunImage"]),

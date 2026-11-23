@@ -4,10 +4,10 @@ import Foundation
 /// com.apple.quarantine propagation: everything extracted from a downloaded
 /// archive must carry the attribute too, or Gatekeeper never sees the
 /// contents. Failures are reported, never swallowed silently.
-enum Quarantine {
+public enum Quarantine {
     private static let attributeName = "com.apple.quarantine"
 
-    static func attribute(of url: URL) -> Data? {
+    public static func attribute(of url: URL) -> Data? {
         let path = url.path
         let length = path.withCString { cPath -> Int in
             getxattr(cPath, attributeName, nil, 0, 0, 0)
@@ -23,7 +23,7 @@ enum Quarantine {
 
     /// True when the attribute was set. False (reported by the caller) means
     /// part of what was extracted is invisible to Gatekeeper.
-    static func apply(_ value: Data, to url: URL) -> Bool {
+    public static func apply(_ value: Data, to url: URL) -> Bool {
         url.path.withCString { cPath -> Bool in
             value.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
                 guard let base = raw.baseAddress else { return false }

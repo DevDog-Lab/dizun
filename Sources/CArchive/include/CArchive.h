@@ -9,3 +9,6 @@
 #include <archive_entry.h>
 
 #endif
+
+// Switch libarchive's string conversion to UTF-8 (idempotent).
+void dizun_archive_use_utf8_locale(void);

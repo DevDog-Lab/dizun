@@ -2,5 +2,6 @@ module CArchive {
     umbrella header "CArchive.h"
     link "z"
     link "bz2"
+    link "iconv"
     export *
 }

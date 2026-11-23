@@ -1,3 +1,4 @@
+import DizunArchive
 import DizunCore
 import DizunFixtures
 import DizunImage
@@ -85,6 +86,7 @@ case "pack":
     var options = Packer.Options()
     var wantsPassword = false
     var legacyCrypto = false
+    var formatName = "zip"
     var index = 0
     while index < arguments.count {
         let arg = arguments[index]
@@ -99,13 +101,35 @@ case "pack":
             wantsPassword = true
         case "--zipcrypto":
             legacyCrypto = true
+        case "--format":
+            index += 1
+            guard index < arguments.count else { fail("pack: --format needs a value") }
+            formatName = arguments[index]
         default:
             sources.append(URL(fileURLWithPath: arg))
         }
         index += 1
     }
     guard !sources.isEmpty else { fail("pack: no sources") }
-    guard let output else { fail("pack: -o <output.zip> is required") }
+    guard let output else { fail("pack: -o <output> is required") }
+    // Non-ZIP formats go through the vendored libarchive writer.
+    if formatName != "zip" {
+        let known: [String: ArchiveFormat] = ["tar": .tar, "tar.gz": .tarGz,
+                                               "tar.bz2": .tarBz2, "tar.xz": .tarXz,
+                                               "7z": .sevenZ]
+        guard let format = known[formatName] else {
+            fail("pack: unknown format '\(formatName)' (zip, tar, tar.gz, tar.bz2, tar.xz, 7z)")
+        }
+        do {
+            let outcome = try LibarchiveWriter.pack(sources, to: output, format: format)
+            print("created \(output.lastPathComponent) [\(formatName)]: " +
+                  "\(outcome.entryCount) entries, \(outcome.totalBytes) bytes" +
+                  (outcome.skippedSpecial.isEmpty ? "" : ", \(outcome.skippedSpecial.count) skipped"))
+        } catch {
+            fail("pack failed: \(error)")
+        }
+        break
+    }
     if wantsPassword, let password = promptNewPassword() {
         options.encryption = legacyCrypto
             ? .zipCrypto(password: password)
@@ -154,6 +178,25 @@ case "unpack":
         index += 1
     }
     guard let input else { fail("unpack: no archive given") }
+    // Non-ZIP archives go through the vendored libarchive reader.
+    if let detected = FormatDetector.detect(url: input), detected != .zip {
+        do {
+            let outcome = try LibarchiveArchive.extract(url: input, options: options.destination.map {
+                LibarchiveArchive.ExtractOptions(destination: $0)
+            } ?? LibarchiveArchive.ExtractOptions())
+            print("extracted [\(detected.displayName)] \(outcome.created.count) items " +
+                  "(\(outcome.totalBytesWritten) bytes)")
+            if !outcome.skippedJunk.isEmpty {
+                print("skipped macOS junk: \(outcome.skippedJunk.count) entries")
+            }
+            if !outcome.skippedSpecial.isEmpty {
+                print("skipped links/specials: \(outcome.skippedSpecial.joined(separator: ", "))")
+            }
+        } catch {
+            fail("unpack failed: \(error)")
+        }
+        break
+    }
     do {
         // An encrypted archive without a password prompts once and retries.
         var result: Unpacker.Result
@@ -251,6 +294,27 @@ case "list":
         index += 1
     }
     guard let input else { fail("list: no archive given") }
+    // Non-ZIP archives go through the vendored libarchive reader.
+    if let detected = FormatDetector.detect(url: input), detected != .zip {
+        do {
+            let listing = try LibarchiveArchive.list(url: input)
+            print("\(input.lastPathComponent) [\(listing.format.displayName)]: " +
+                  "\(listing.entries.count) entries")
+            for entry in listing.entries {
+                let size = entry.declaredSize.map(String.init) ?? "?"
+                let kind: String
+                switch entry.kind {
+                case .directory: kind = "dir "
+                case .file: kind = "file"
+                case .special: kind = "skip"
+                }
+                print("  \(kind) \(size.padding(toLength: 10, withPad: " ", startingAt: 0)) \(entry.rawName)")
+            }
+        } catch {
+            fail("list failed: \(error)")
+        }
+        break
+    }
     do {
         let reader = try ZipReader(url: input)
         let entries = forced.map { reader.entriesDecoded(as: $0) } ?? reader.entries
