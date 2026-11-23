@@ -1,5 +1,19 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-23 — 第51回: 多形式対応の設計採択（Codex設計相談）
+
+- ユーザー要求: ZIP以外の圧縮形式対応・圧縮解凍アプリとして充実・デザインもプロ意識を持って。
+- Codexへ設計相談（run_5b5c6612fb22 / ctx_f5977dc73af3、提案書 /tmp/dizun-multiformat-design/proposal.md）:
+  - 対応形式マトリクス（tar系P1・7z/RAR受信P2・7z作成+LZH P3、暗号化7z/RAR・分割は保留）
+  - アーキテクチャA/B/C比較 → **案B（ZIP独自+libarchive併用）推奨**
+  - UI/UXデザイン案（形式popup1行・ZIP既定・形式バッジ・ja/enコピー・Finder拡張）
+  - 安全設計（共通契約・形式固有の罠・形式判定）・libarchive同梱条件・交叉検証計画
+- Claude Codeが主要主張をスポット検証し**全て正確**と確認: (1)監査ビルドCMakeCacheのLIBB2/LZ4/ZSTD/LZMAが`/opt/homebrew`由来＝配布構成の証明でない (2)SDKに`lzma.h`無し（liblzma.tbdのみ）(3)Info.plistのServicesは4操作（README「3種」と不整合）。
+- **ユーザー採択**: エンジン=案B、範囲=Phase 3まで一括、形式選択=セッションのみ保持。残る決定ポイントは提案書の推奨に従う（暗号化7z/RAR保留・tarは日常送受信用・helper隔離・固定ソース+bootstrap・xzは技術ゲート次第で延期可）。
+- ARCHITECTURE_DECISION v2.0を追記。実装タスクを8分割して開始（libarchiveビルド→安全層→tar→7z/RAR→7z作成/LZH→UI→検証）。
+- コミット: （本コミット）。
+
+
 ## 2026-11-21 — 第50回: README拡充・初push・LP設計プロンプト
 
 - ユーザー指示: 現状のまま運用するためコミットし、GitHubの説明文を充実させてpush。あわせてdevdog-lab.com用の製品ページ設計をプロンプト化。

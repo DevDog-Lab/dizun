@@ -4,6 +4,55 @@
 根拠: `docs/OSS_AUDIT.md`（監査）・`docs/BASELINE.md`（ビルド検証）
 決定者: Claude Code（SPEC v0.3 ゲートAの枠組みに従う。ユーザー確認は次回報告時に求める）
 
+---
+
+# アーキテクチャ決定 — v2.0（多形式対応エンジン）
+
+決定日: 2026-11-23
+根拠: Codex設計提案（Orca run_5b5c6612fb22 / dispatch ctx_f5977dc73af3、提案書 /tmp/dizun-multiformat-design/proposal.md を検証後に要約）・v1.0監査資産
+決定者: ユーザー採択（エンジン方針=案B・範囲=Phase 3まで一括・形式選択=セッションのみ。残りは提案書の推奨に従う）
+
+## 決定
+
+**ZIPは独自エンジン（DizunCore）を維持し、ZIP以外（tar系・7z・RAR受信・LZH受信・7z作成）をSHA固定版libarchiveで扱う併用構成を採る。**
+
+```
+DizunApp / CLI
+    ↓ ArchiveService（形式判定・能力照会・一覧・ジョブ）
+    ├─ ZIPAdapter → 既存DizunCore Reader/Writer（変更の主体としない）
+    └─ LibarchiveAdapter → 薄いC shim → 固定版libarchive static（XCFramework）
+    ↓ 共通ArchiveSafety（計画・限界・衝突・FD基準書込・cleanup・quarantine）
+```
+
+- libarchive単体の単体.gz/bz2/xz解凍、7z作成（LZMA2 preset）、LZH（CP932）受信を含む。暗号化7z/RAR・分割・SFX・Deflate64は明示的な保留（対応と呼ばない）。
+- 形式選択UIはセッションのみ保持（起動時は常にZIP）。Finder Servicesは現行どおりZIP固定。
+- 提案書の指摘どおり、監査時ビルドのHomebrew依存自動検出（LIBB2/LZ4/ZSTD/LZMA）は配布構成の証明ではない。依存をSDK明示で固定し直すことを採用条件とする。SDKに`lzma.h`が無いためxz系はLZMAヘッダの入手・ABI検証が閉じない場合、該当形式のみ延期する。
+
+## 見送った案
+
+- **案A（tar系を含む全自前実装）**: 外部コードゼロを維持できるが、7z/RAR受信という最大の受信価値を解決せず、tar仕様追随を自力で負担するため。
+- **案C（全形式libarchive移行）**: ZIPのCP932検出・暗号化・二重ZIP・衝突挙動をlibarchive上に再実装する大移行であり、現時点で移行を正当化する障害がないため。
+
+## 採用条件（満たせないものは該当機能を延期）
+
+1. libarchiveはSHA `432ab464725aa99c53de7572979bd9bbbf382ed1` 固定。vendor manifest（URL・SHA・取得物SHA-256・patch・ビルド設定・ヘッダ出所）整備。
+2. ビルドは事前スクリプトで依存を明示固定（SDKのtbd/libのみ。Homebrew探索の排除を`otool -L`とlink mapで確認）。`archive_read_support_format_all`等の包括登録禁止、形式を列挙登録。
+3. ライセンス台帳（THIRD_PARTY_NOTICES.md）: ファイル単位の帰属（BSD-2-Clause系・UC Regents・public domain・BLAKE2のトリプルライセンス選択）。xz同梱時はXZ Utils（public domain）を別エントリで管理。
+4. 上流テストを検証構成で実施。未実施のまま採用しない。
+5. 共通安全層の一般化に先立ち、現行弱点（wrapper無し経路のcleanup台帳・親ディレクトリsymlink差替え・二重ZIP再帰の予算共有）を敵対試験で閉じる。
+
+## v1.0からの経緯
+
+v1.0は「libarchive同梱を次フェーズでpinned SHA・ライセンス一覧・サブセット検証を条件に再判断」としていた。2026-11-23、ユーザーの多形式対応要求によりCodexへ設計相談（案A/B/C比較・形式マトリクス・UI/UXデザイン・段階的受入条件を含む提案書）を行い、その推奨をClaude Codeが検証（CMakeCacheのHomebrew混入・SDKのlzma.h不在・Services操作数の指摘を確認）した上でユーザーが採択した。
+
+---
+
+# アーキテクチャ決定 — v1.0（当初の決定・参考）
+
+決定日: 2026-11-19
+根拠: `docs/OSS_AUDIT.md`（監査）・`docs/BASELINE.md`（ビルド検証）
+決定者: Claude Code（SPEC v0.3 ゲートAの枠組みに従う）
+
 ## 決定
 
 **DIZUNは新規Swiftパッケージとして開発する。crateを土台に流用しない。ZIPエンジン（DIZUNCore）は自前実装とし、zip-porter（MIT）を実装の参照・必要時の移植元とする。libarchiveの同梱は次フェーズ（7z/RAR対応）に先送りする。**
