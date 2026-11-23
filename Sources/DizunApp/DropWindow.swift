@@ -1,4 +1,5 @@
 import AppKit
+import DizunArchive
 import DizunCore
 import Foundation
 
@@ -13,6 +14,13 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
     private var targetField: NSTextField?
     private var nameField: NSTextField?
     private var settingsPages: [NSView] = []
+    /// Compression format chosen in this window's lifetime. Session-only
+    /// by design: every launch starts from ZIP so nothing gets sent in a
+    /// format the recipient cannot open by accident.
+    private var sessionFormat: ArchiveFormat = .zip
+    private var encodingControl: NSSegmentedControl?
+    private var cryptoControl: NSSegmentedControl?
+    private var formatHintLabel: NSTextField?
     private var contentStack: NSStackView?
     private var resultLabel = NSTextField(wrappingLabelWithString: "")
     private var dropCaption = NSTextField(labelWithString: L10n.dropHere)
@@ -25,6 +33,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
 
     func show() {
         window?.close()
+        sessionFormat = .zip
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
                               styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
@@ -58,7 +67,7 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         let drop = DropView()
         drop.onDrop = { [weak self] urls in
             self?.clearResult()
-            self?.coordinator.performAutomatic(urls: urls) {}
+            self?.coordinator.performAutomatic(urls: urls, format: self?.sessionFormat ?? .zip) {}
         }
         dropCaption.font = .systemFont(ofSize: 13)
         dropCaption.textColor = .white
@@ -194,6 +203,29 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
 
     /// One setting per row, aligned label column.
     private func zipTab() -> NSView {
+        // Format picker: one flat menu, ZIP as the default. The
+        // encoding/encryption rows only apply to ZIP and are disabled for
+        // the other formats (with an explicit note, never silently).
+        let formats: [ArchiveFormat] = [.zip, .tarGz, .tar, .tarBz2, .tarXz, .sevenZ]
+        let formatPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        // Target/action goes on the popup itself (same pattern as the
+        // segmented rows): per-item targets proved unreliable here — the
+        // menu showed the change while the session variable never heard
+        // about it, so drops kept producing ZIPs.
+        formatPopup.target = self
+        formatPopup.action = #selector(formatChanged(_:))
+        for (index, format) in formats.enumerated() {
+            let item = NSMenuItem(title: L10n.formatMenuLabel(format),
+                                  action: nil, keyEquivalent: "")
+            item.tag = index
+            formatPopup.menu?.addItem(item)
+        }
+        formatPopup.selectItem(at: 0)
+        let formatHintField = NSTextField(labelWithString: L10n.formatHint(.zip))
+        formatHintField.font = .systemFont(ofSize: 11)
+        formatHintField.textColor = NSColor.white.withAlphaComponent(0.75)
+        formatHintLabel = formatHintField
+
         let encoding = DizunRows.segmented(
             [L10n.utf8Standard, L10n.cp932Windows],
             target: self, action: #selector(encodingChanged(_:)),
@@ -212,6 +244,8 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
             encoding.role = .valueSelection
             crypto.role = .valueSelection
         }
+        encodingControl = encoding
+        cryptoControl = crypto
         let name = NSTextField(frame: NSRect(x: 0, y: 0, width: 180, height: 24))
         // Swap the centered cell in FIRST, then configure everything.
         // NSTextField forwards isEditable/isBordered/font/placeholder to
@@ -247,12 +281,34 @@ final class DropletWindowController: NSObject, NSWindowDelegate, NSTextFieldDele
         name.delegate = self
         name.stringValue = Settings.archiveBaseName ?? ""
         nameField = name
+        let formatLine = NSStackView(views: [formatPopup])
+        formatLine.orientation = .horizontal
+        formatLine.spacing = 8
+        formatLine.alignment = .centerY
         return DizunRows.group([
+            DizunRows.row(label: L10n.archiveFormat, controls: [formatPopup], tinted: true),
             DizunRows.row(label: L10n.archiveFileName, controls: [name], tinted: true),
             DizunRows.row(label: L10n.fileEncoding, controls: [encoding], tinted: true),
             DizunRows.row(label: L10n.encryption, controls: [crypto],
                           hint: L10n.nestedHint, tinted: true),
         ])
+    }
+
+    @objc private func formatChanged(_ sender: NSPopUpButton) {
+        let order: [ArchiveFormat] = [.zip, .tarGz, .tar, .tarBz2, .tarXz, .sevenZ]
+        guard sender.selectedTag() < order.count else { return }
+        let format = order[sender.selectedTag()]
+        sessionFormat = format
+        // Encoding and encryption are ZIP-only; show that honestly instead
+        // of silently dropping the settings.
+        encodingControl?.isEnabled = format == .zip
+        cryptoControl?.isEnabled = format == .zip
+        var hint = L10n.formatHint(format)
+        if format != .zip {
+            let note = L10n.noEncryptionForFormat
+            hint = hint.isEmpty ? note : hint + " · " + note
+        }
+        formatHintLabel?.stringValue = hint
     }
 
     private func imageTab() -> NSView {

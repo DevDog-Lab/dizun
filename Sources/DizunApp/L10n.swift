@@ -1,3 +1,4 @@
+import DizunArchive
 import Foundation
 
 /// In-app language selection. macOS resolves localization per-app at launch
@@ -67,6 +68,41 @@ enum L10n {
     static var none: String { lang.isEN ? "None" : "なし" }
     static var nestedHint: String {
         lang.isEN ? "Nested ZIP hides the contents too" : "二重ZIPで構成も隠す"
+    }
+
+    // Archive format picker (compression side)
+    static var archiveFormat: String { lang.isEN ? "Format" : "形式" }
+    static func formatHint(_ format: ArchiveFormat) -> String {
+        switch format {
+        case .zip:
+            lang.isEN ? "For everyday file sharing." : "ふだんの受け渡しに。"
+        case .tarGz:
+            lang.isEN ? "Bundle and compress files together." : "複数のファイルをひとつにまとめて圧縮します。"
+        case .tar:
+            lang.isEN ? "Bundle files without compression." : "ひとまとめにします。サイズは圧縮しません。"
+        case .tarXz:
+            lang.isEN ? "Compression may take longer." : "圧縮に時間がかかる場合があります。"
+        case .tarBz2:
+            lang.isEN ? "Bundle and compress files together." : "複数のファイルをひとつにまとめて圧縮します。"
+        case .sevenZ:
+            lang.isEN ? "Recipients may need a compatible app." : "受け取る方に対応アプリが必要な場合があります。"
+        default:
+            ""
+        }
+    }
+    static var noEncryptionForFormat: String {
+        lang.isEN ? "This format will not be encrypted" : "この形式では暗号化されません"
+    }
+    static func formatMenuLabel(_ format: ArchiveFormat) -> String {
+        switch format {
+        case .zip: lang.isEN ? "ZIP (default)" : "ZIP（標準）"
+        case .tar: "TAR"
+        case .tarGz: "TAR.GZ"
+        case .tarBz2: "TAR.BZ2"
+        case .tarXz: "TAR.XZ"
+        case .sevenZ: "7z"
+        default: format.displayName
+        }
     }
     static var longEdgeLimit: String { lang.isEN ? "Long-edge limit" : "長辺上限" }
     static var blankNoResize: String { lang.isEN ? "blank = no resize" : "空欄でリサイズなし" }

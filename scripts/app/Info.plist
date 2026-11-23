@@ -32,8 +32,10 @@
 	<false/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
-	<!-- ZIP handling: visible in 開く/Open With. Rank Alternate — DIZUN never
-	     claims the default association; switching stays a user action. -->
+	<!-- Archive handling: visible in 開く/Open With. Rank Alternate — DIZUN
+	     never claims the default association; switching stays a user action.
+	     Every UTI below is system-provided (verified via UTType on macOS 27):
+	     no imported/exported declarations of existing types. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -47,6 +49,60 @@
 			<array>
 				<string>public.zip-archive</string>
 				<string>com.pkware.zip-archive</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>tar archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.tar-archive</string>
+				<string>org.gnu.gnu-zip-tar-archive</string>
+				<string>org.gnu.gnu-zip-archive</string>
+				<string>public.tar-bzip2-archive</string>
+				<string>org.tukaani.tar-xz-archive</string>
+				<string>org.tukaani.xz-archive</string>
+				<string>public.bzip2-archive</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>7z archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.7-zip.7-zip-archive</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>RAR archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.rarlab.rar-archive</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>LHA archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>cx.c3.lha-archive</string>
 			</array>
 		</dict>
 		<!-- Droplet claim: the Dock only accepts drops on a *non-running*
@@ -71,7 +127,7 @@
 	     for Finder to consider the service applicable to a file selection;
 	     legacy NSSendTypes alone registers but never shows in the menu.
 	     The two compress entries are explicit: neither consults the
-	     drag-and-drop encryption preference. -->
+	     drag-and-drop encryption or format preference (always ZIP). -->
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -142,6 +198,16 @@
 			<key>NSSendFileTypes</key>
 			<array>
 				<string>public.zip-archive</string>
+				<string>public.tar-archive</string>
+				<string>org.gnu.gnu-zip-tar-archive</string>
+				<string>org.gnu.gnu-zip-archive</string>
+				<string>public.tar-bzip2-archive</string>
+				<string>org.tukaani.tar-xz-archive</string>
+				<string>org.tukaani.xz-archive</string>
+				<string>public.bzip2-archive</string>
+				<string>org.7-zip.7-zip-archive</string>
+				<string>com.rarlab.rar-archive</string>
+				<string>cx.c3.lha-archive</string>
 			</array>
 		</dict>
 	</array>

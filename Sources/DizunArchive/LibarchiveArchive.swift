@@ -56,10 +56,14 @@ public enum LibarchiveArchive {
         public var created: [String]
         public var skippedJunk: [String]
         public var skippedSpecial: [String]
+        /// Entries diverted to "name 2"… because the name already existed
+        /// on disk (or earlier in this run). Existing items were untouched.
+        public var renamedDuplicates: [(original: String, chosen: String)]
         public var totalBytesWritten: UInt64
         public var quarantineFailures: [String]
         init() {
             created = []; skippedJunk = []; skippedSpecial = []
+            renamedDuplicates = []
             totalBytesWritten = 0; quarantineFailures = []
         }
     }
@@ -226,6 +230,36 @@ public enum LibarchiveArchive {
         var outcome = ExtractOutcome()
         var usedNames: Set<String> = []
         var owned: [URL] = []
+        // Folder-level separation: a top-level name that already exists
+        // on disk moves the *whole* subtree to "name 2", instead of
+        // letting inner files mingle with the existing folder's files.
+        var topRemap: [String: String] = [:]
+        for entry in listing.entries {
+            guard let components = PathSafety.sanitize(entry.rawName),
+                  let first = components.first else { continue }
+            let key = PathSafety.collisionKey([first])
+            if topRemap[key] != nil { continue }
+            if !FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent(first).path) {
+                topRemap[key] = first
+                continue
+            }
+            var index = 2
+            while FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("\(first) \(index)").path) {
+                index += 1
+            }
+            let chosen = "\(first) \(index)"
+            topRemap[key] = chosen
+            outcome.renamedDuplicates.append((first, chosen))
+        }
+        func remapped(_ components: [String]) -> [String] {
+            guard let first = components.first,
+                  let mapped = topRemap[PathSafety.collisionKey([first])] else {
+                return components
+            }
+            return [mapped] + components.dropFirst()
+        }
         let quarantine = Quarantine.attribute(of: url)
         do {
             try withSubdirectoryIfNeeded(listing, destination: destination) { root in
@@ -239,9 +273,10 @@ public enum LibarchiveArchive {
                     }
                     guard let entryPtr else { break }
                     let entry = snapshot(entryPtr)
-                    guard let components = PathSafety.sanitize(entry.rawName) else {
+                    guard let rawComponents = PathSafety.sanitize(entry.rawName) else {
                         throw Failure.safetyLimit("unsafe path: \(entry.rawName)")
                     }
+                    let components = remapped(rawComponents)
                     if options.skipMacJunk && JunkFilter.isJunkPath(components) {
                         outcome.skippedJunk.append(entry.rawName)
                         archive_read_data_skip(a)
@@ -250,14 +285,16 @@ public enum LibarchiveArchive {
                     switch entry.kind {
                     case .directory:
                         let dir = uniqueURL(root: root, components: components,
-                                            used: &usedNames, isDirectory: true)
+                                            used: &usedNames, isDirectory: true,
+                                            renamed: &outcome.renamedDuplicates)
                         try safeCreateDirectory(dir)
                         try owned.appendingUniqueCreated(dir)
                         outcome.created.append(components.joined(separator: "/"))
                     case .file:
                         var written: UInt64 = 0
                         let fileURL = uniqueURL(root: root, components: components,
-                                                used: &usedNames, isDirectory: false)
+                                                used: &usedNames, isDirectory: false,
+                                                renamed: &outcome.renamedDuplicates)
                         // Some containers (7z) list files before their
                         // directories; create missing parents on demand and
                         // keep them on the cleanup ledger.
@@ -428,13 +465,24 @@ public enum LibarchiveArchive {
     }
 
     /// Case/NFC-insensitive unique destination, same rule as the ZIP
-    /// engine: `Report.txt` vs an existing `report.txt` must not collide.
+    /// engine: an entry never overwrites — not another entry of this job
+    /// (`used`), and not anything already on disk. Existing folders and
+    /// files push the new item to "name 2", "name 3"… instead of failing.
+    /// Renames are recorded so the caller can report them.
     static func uniqueURL(root: URL, components: [String], used: inout Set<String>,
-                          isDirectory: Bool) -> URL {
+                          isDirectory: Bool,
+                          renamed: inout [(original: String, chosen: String)]) -> URL {
+        func resolve(_ parts: [String]) -> URL {
+            parts.reduce(root) { $0.appendingPathComponent($1) }
+        }
+        func isTaken(_ parts: [String]) -> Bool {
+            used.contains(PathSafety.collisionKey(parts))
+                || FileManager.default.fileExists(atPath: resolve(parts).path)
+        }
         let key = PathSafety.collisionKey(components)
-        if !used.contains(key) {
+        if !isTaken(components) {
             used.insert(key)
-            return components.reduce(root) { $0.appendingPathComponent($1) }
+            return resolve(components)
         }
         var stem = components
         let lastName = stem.removeLast()
@@ -445,10 +493,11 @@ public enum LibarchiveArchive {
             let candidate = ext.isEmpty ? "\(base) \(index)" : "\(base) \(index).\(ext)"
             var probe = stem
             probe.append(candidate)
-            let probeKey = PathSafety.collisionKey(probe)
-            if !used.contains(probeKey) {
-                used.insert(probeKey)
-                return probe.reduce(root) { $0.appendingPathComponent($1) }
+            if !isTaken(probe) {
+                used.insert(PathSafety.collisionKey(probe))
+                renamed.append((components.joined(separator: "/"),
+                                probe.joined(separator: "/")))
+                return resolve(probe)
             }
             index += 1
         }

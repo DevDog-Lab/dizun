@@ -1,4 +1,5 @@
 import AppKit
+import DizunArchive
 import DizunCore
 import DizunImage
 import Foundation
@@ -27,29 +28,44 @@ final class WorkCoordinator {
     /// queue; the receiver hops to main itself).
     var reportResult: ((String) -> Void)?
 
-    /// Drop / open heuristic: only .zips → extract, anything else → compress.
-    /// A lone ZIP is routed to the preview first when one is configured.
-    func performAutomatic(urls: [URL], completion: @escaping () -> Void) {
+    /// Drop / open heuristic: archives (any supported format, detected by
+    /// content) → extract, images only → optimize, anything else → compress.
+    /// A lone archive is routed to the preview first when one is configured.
+    func performAutomatic(urls: [URL], format: ArchiveFormat = .zip,
+                          completion: @escaping () -> Void) {
         let images = urls.filter(ImageOptimizer.isSupported)
         if images.count == urls.count, !images.isEmpty {
             optimizeImages(images, completion: completion)
             return
         }
-        let zips = urls.filter { $0.pathExtension.lowercased() == "zip" }
-        if zips.count == urls.count, !zips.isEmpty {
-            if zips.count == 1, !Settings.instantExtract, let openPreview {
-                openPreview(zips[0])
+        let archives = urls.filter { FormatDetector.detect(url: $0) != nil }
+        if archives.count == urls.count, !archives.isEmpty {
+            if archives.count == 1, !Settings.instantExtract, let openPreview {
+                openPreview(archives[0])
                 return
             }
-            extractAll(archives: zips, completion: completion)
+            extractAll(archives: archives, completion: completion)
         } else {
-            compress(files: urls, completion: completion)
+            compress(files: urls, format: format, completion: completion)
         }
     }
 
     func extractAll(archives: [URL], forcedEncoding: NameEncoding? = nil,
                     password: String? = nil,
                     completion: (() -> Void)? = nil) {
+        // Non-ZIP formats have no password pre-check: the libarchive path
+        // reports encrypted members as a clear error instead.
+        let zips = archives.filter { FormatDetector.detect(url: $0) == .zip }
+        let others = archives.filter { FormatDetector.detect(url: $0) != .zip }
+        if !others.isEmpty {
+            extractNonZip(others, completion: completion)
+            if !zips.isEmpty {
+                // Rare mix; run the ZIPs afterwards through the same panel.
+                extractAll(archives: zips, forcedEncoding: forcedEncoding,
+                           password: password, completion: nil)
+            }
+            return
+        }
         // Ask for the password up front — the engine refuses to touch the
         // disk without one, and prompting before the panel starts keeps the
         // retry clean.
@@ -165,6 +181,57 @@ final class WorkCoordinator {
         }
     }
 
+    /// Extraction for non-ZIP formats (tar family, 7z, RAR, LZH…).
+    /// Same guarantees as the ZIP path: budgets, no overwrites, quarantine.
+    private func extractNonZip(_ archives: [URL], completion: (() -> Void)? = nil) {
+        run(panelTitle: L10n.extract,
+            panelLabel: archives.first?.lastPathComponent ?? "") { job in
+            var failures: [String] = []
+            var extractedNames: [String] = []
+            for archive in archives {
+                if job.isCancelled { throw DizunError.cancelled }
+                job.update(archive.lastPathComponent)
+                do {
+                    var options = LibarchiveArchive.ExtractOptions()
+                    options.isCancelled = { job.isCancelled }
+                    let outcome = try LibarchiveArchive.extract(url: archive, options: options)
+                    if !outcome.skippedSpecial.isEmpty {
+                        job.notice("スキップしたリンク等: \(outcome.skippedSpecial.count)件")
+                    }
+                    if !outcome.renamedDuplicates.isEmpty {
+                        let pairs = outcome.renamedDuplicates
+                            .prefix(3).map { "\($0.original) → \($0.chosen)" }
+                        job.notice("名前の衝突を回避: " + pairs.joined(separator: "、")
+                            + (outcome.renamedDuplicates.count > 3
+                               ? " ほか\(outcome.renamedDuplicates.count - 3)件" : ""))
+                    }
+                    if !outcome.quarantineFailures.isEmpty {
+                        job.notice("quarantine未適用: \(outcome.quarantineFailures.count)件")
+                    }
+                    let listing = try LibarchiveArchive.list(url: archive)
+                    let top = Set(listing.entries.compactMap { entry -> String? in
+                        PathSafety.sanitize(entry.rawName)?.first
+                    })
+                    let revealDir = outcome.created.first.flatMap { c in
+                        URL(fileURLWithPath: c).deletingLastPathComponent()
+                    } ?? archive.deletingLastPathComponent()
+                    job.reveal(top.isEmpty ? [revealDir] : [revealDir])
+                    extractedNames.append(contentsOf: Array(top))
+                } catch {
+                    if archives.count == 1 { throw error }
+                    failures.append("\(archive.lastPathComponent): \(error)")
+                }
+            }
+            if !failures.isEmpty { job.alert(failures.joined(separator: "\n")) }
+            let names = extractedNames.prefix(3).joined(separator: lang.isEN ? ", " : "、")
+            if !names.isEmpty {
+                self.reportResult?(L10n.extractionDone(names, more: extractedNames.count - 3))
+            }
+        } completion: {
+            completion?()
+        }
+    }
+
     /// Synchronous move into the user's Trash. NSWorkspace.recycle is
     /// asynchronous — combined with a swap it can race and recycle the
     /// *replacement* file, so DIZUN moves the original itself (a same-volume
@@ -185,7 +252,32 @@ final class WorkCoordinator {
     }
 
     func compress(files: [URL], mode: CompressMode = .fromSettings,
+                  format: ArchiveFormat = .zip,
                   completion: (() -> Void)? = nil) {
+        // Non-ZIP formats go through the vendored libarchive writer; the
+        // password prompt below is a ZIP-only concern.
+        if format != .zip {
+            run(panelTitle: L10n.compressTitle,
+                panelLabel: files.first?.lastPathComponent ?? "") { job in
+                let destination = try Self.archiveDestination(for: files, format: format)
+                job.update(destination.lastPathComponent)
+                let outcome = try LibarchiveWriter.pack(files, to: destination, format: format)
+                var note = ""
+                if !outcome.skippedSpecial.isEmpty {
+                    note = "スキップしたリンク等: \(outcome.skippedSpecial.count)件"
+                }
+                job.notice(note)
+                job.reveal([destination])
+                self.reportResult?(L10n.archiveDone(
+                    destination.lastPathComponent,
+                    files: outcome.entryCount,
+                    size: ByteCountFormatter.string(fromByteCount: Int64(outcome.totalBytes),
+                                                    countStyle: .file)) + (note.isEmpty ? "" : "\n" + note))
+            } completion: {
+                completion?()
+            }
+            return
+        }
         // The password is asked per job and never stored.
         var encryption = ZipWriter.Encryption.none
         switch mode {
@@ -233,10 +325,10 @@ final class WorkCoordinator {
         }
     }
 
-    /// Finder's naming rule: one item → "name.zip", several → "Archive.zip",
+    /// Finder's naming rule: one item → "name.<ext>", several → "Archive.<ext>",
     /// uniquified against the destination folder. `Packer` still refuses to
     /// overwrite whatever appears between this check and the create.
-    static func archiveDestination(for files: [URL]) throws -> URL {
+    static func archiveDestination(for files: [URL], format: ArchiveFormat = .zip) throws -> URL {
         guard let first = files.first else {
             throw DizunError.ioFailure("対象がありません")
         }
@@ -245,10 +337,12 @@ final class WorkCoordinator {
             ?? (files.count == 1
                 ? first.deletingPathExtension().lastPathComponent
                 : "Archive")
-        var candidate = folder.appendingPathComponent(stem + ".zip")
+        // ZIP keeps the plain extension; compound formats keep their suffix.
+        let suffix = "." + (format.commonExtensions.first ?? "zip")
+        var candidate = folder.appendingPathComponent(stem + suffix)
         var n = 2
         while FileManager.default.fileExists(atPath: candidate.path) {
-            candidate = folder.appendingPathComponent("\(stem) \(n).zip")
+            candidate = folder.appendingPathComponent("\(stem) \(n)\(suffix)")
             n += 1
         }
         return candidate

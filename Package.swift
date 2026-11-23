@@ -30,7 +30,8 @@ let package = Package(
                           dependencies: ["DizunCore", "DizunImage", "DizunFixtures", "DizunArchive"]),
         // Finder-facing app shell: archive-open extraction, Services, droplet.
         // Packaged into Dizun.app by scripts/build-app.sh.
-        .executableTarget(name: "DizunApp", dependencies: ["DizunCore", "DizunImage"]),
+        .executableTarget(name: "DizunApp", dependencies: ["DizunCore", "DizunImage", "DizunArchive"]),
         .testTarget(name: "DizunCoreTests", dependencies: ["DizunCore", "DizunFixtures"]),
+        .testTarget(name: "DizunArchiveTests", dependencies: ["DizunArchive"]),
     ]
 )
