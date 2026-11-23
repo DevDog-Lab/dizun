@@ -1,5 +1,28 @@
 # WORK_LOG — DIZUN作業記録
 
+## 2026-11-23 — 第54回: 形式popup修正・同名衝突の解消・README/LP資料
+
+- ユーザー実機報告2件を解消:
+  1. **形式popupが反映されない**: menu item 個別の target/action では action が発火せず sessionFormat が ZIP のまま（表示だけ変わる）だった。popup 自体へ target/action を設定する方式（セグメントと同一慣行）に修正し、デバッグログで切替発火を実証後、ログ行は除去。
+  2. **同名フォルダ残存状態での解凍エラー**: 非ZIP解凍は O_EXCL で既存ファイル衝突時に「cannot create」エラーで失敗（ZIPエンジンのユニーク名化がlibarchive側に無かった）。**トップレベル名の一括リマップ**（サブツリー全体を「名前 2」へ分離）+ 各エントリの保険ユニーク化 + renamedDuplicates 報告を実装。テスト「testExistingFolderGetsUniqueName」追加（既存温存・分離先の内容一致を表明）、実機でも src → src 2 分離を確認。
+- popup の区切り線はユーザー指示で削除（フラットな並び）。
+- README に多形式対応を追記（対応表・上流テスト1152/1152・35シナリオ・libarchive/liblzma 同梱の明記、「外部コード無し」の範囲を DizunCore/DizunImage に限定）。
+- LP用追加資料 `docs/LANDING_PAGE_ADDITIONS.md` を作成（devdog-lab-site 実装者向け: 対応マトリクス・UXストーリー・ja/enコピー案・FAQ・スクショ候補・宣伝禁止事項）。
+- コミット: 第53回分と合わせて実施（ユーザー実機確認済み）。
+
+
+## 2026-11-23 — 第53回: アプリUIへの多形式統合（形式選択・プレビュー・Finder）
+
+- **WorkCoordinator**: 経路判定を拡張子から`FormatDetector`（マジックバイト）へ変更。全対応形式がドロップ/オープンで解凍経路へ。`compress(format:)`を追加し非ZIP作成はLibarchiveWriterへ。`extractAll`はZIP/非ZIPを自動振り分け。Finder Servicesは従来どおりZIP固定（形式設定を無断流用しない）。
+- **ドロップレット窓**: ZIPタブに「形式」行（NSPopUpButton）を追加。ZIP（標準）/TAR.GZ + 区切り + TAR/TAR.BZ2/TAR.XZ/7z。**セッションのみ保持**（起動時は常にZIP、show()でリセット）——うっかり相手が開けない形式で送る事故を防ぐ設計。非ZIP選択時は文字コード・暗号化セグメントを無効化し「この形式では暗号化されません」を hint 表示（設定は黙って捨てず明示）。
+- **解凍プレビュー**: 非ZIPアーカイブを対応（形式バッジ＋件数・サイズ＋一覧）。ZIPは従来の文字コード切替を維持、非ZIPは形式固有メタデータ由来のため切替なし。
+- **Info.plist**: tar系（public.tar-archive等）・7z・RAR・LZHをCFBundleDocumentTypesと解凍ServiceのNSSendFileTypesへ追加。**全UTIをmacOS 27のUTTypeで実在確認**（7z→org.7-zip.7-zip-archive、rar→com.rarlab.rar-archive、lzh→cx.c3.lha-archive 等）して実在UTIのみ使用、UTImported宣言は不使用。
+- **XCTest**: DizunArchiveTests新設（9シナリオ）: tar/tar.gz/tar.bz2/tar.xz/7zラウンドトリップ（日本語名・SHA-256ツリー一致）、偽装拡張子検出、stream内tar解決、敵対パス拒否（絶対パス・`..`）、上書き防止。**合計34/34合格**・警告0。
+- **アプリE2E（実機）**: tar.gzをオープン→プレビュー窓（TAR.GZバッジ・「5項目・100 KB」・日本語名一覧）→Return キーで解凍→対照データと完全一致を確認。
+- 残課題（次回）: 形式popupの切替実操作・見た目のユーザー実機確認、T9敵対試験（openat化・helper隔離・専用出力領域）、分割/暗号化RARの説明付き拒否、GNU tar交叉、README/SPEC/OSS_AUDIT更新。
+- コミット: UI変更を含むため**ユーザー実機確認後に実施**（第52回までコミット済み）。
+
+
 ## 2026-11-23 — 第52回: 多形式エンジン実装（libarchive統合・tar/7z/LZH/RAR5受信）
 
 - **libarchive+liblzma vendoring**（0df2291）: xz v5.8.4(0BSD)・libarchive(監査SHA固定)を依存完全固定で静的ビルド→XCFramework→SwiftPM binaryTarget+CArchive shim（`link z/bz2/iconv`）。CMakeCacheの`/opt/homebrew`**ライブラリ参照を検査で拒否**（ツール類のパスは除外）。`scripts/vendor/build-vendor.sh`が再生成、vendor/はgit管理外、manifest.txtにSHA-256記録。THIRD_PARTY_NOTICESに台帳追記。

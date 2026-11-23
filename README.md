@@ -23,6 +23,23 @@ DIZUN は、日本語ファイル名の文字化けと OS 間のファイル交�
 - 暗号化 ZIP: **AES-256（WinZip拡張）** と **ZipCrypto** に対応。暗号化圧縮ではエントリ名・構成が平文で見えないよう自動的に二重ZIP化し、DIZUNでは自動アンラップ
 - 外部ツール交叉検証: 7-Zip 26.00・Info-ZIP unzip・ditto・python zipfile と双方向で内容一致を確認
 
+### 多形式アーカイブ（tar・7z・RAR・LZH）
+
+ZIP 以外の形式は、SHA 固定・依存完全固定でビルドした libarchive（+liblzma）を同梱して扱います。安全契約（パス検査・上書き禁止・サイズ上限・リンク無効化）は ZIP エンジンと同一です。
+
+| 形式 | 作成 | 解凍 | プレビュー |
+| --- | --- | --- | --- |
+| TAR / TAR.GZ / TAR.BZ2 / TAR.XZ | ✓ | ✓ | ✓ |
+| 7z | ✓ | ✓ | ✓ |
+| RAR / RAR5 | — | ✓ | ✓ |
+| LZH / LHA | — | ✓（CP932日本語名対応） | ✓ |
+| 単体 .gz / .bz2 / .xz | — | ✓（中身がtarなら自動判別） | ✓ |
+
+- 形式は拡張子でなく**中身（マジックバイト）で判定**。偽装拡張子はプレビューで通知
+- 圧縮時の形式選択はポップアップで **ZIP 既定・セッション限り**（起動し直すと常に ZIP に戻る）
+- 暗号化 7z/RAR・分割アーカイブ・SFX には対応せず、検出時に説明を表示（対応とは呼びません）
+- Finder 統合（ダブルクリック・右クリックの「DIZUNで解凍」）も全対応形式に拡大
+
 ### 画像最適化
 
 - PNG: テキスト/EXIF系チャンク削除、IDAT再圧縮（スキャンラインはバイト完全一致）
@@ -50,8 +67,9 @@ DIZUN は、日本語ファイル名の文字化けと OS 間のファイル交�
 
 | 項目 | 状況 |
 | --- | --- |
-| 独自テスト | XCTest 25シナリオ全合格（暗号化・文字化け・防御系を含む） |
-| Mac 上での相互運用 | 7-Zip / Info-ZIP unzip / ditto / python zipfile と双方向で内容一致を確認済み |
+| 独自テスト | XCTest 35シナリオ全合格（暗号化・文字化け・防御系・多形式ラウンドトリップを含む） |
+| 同梱エンジンの上流テスト | libarchive を検証構成でビルドし、**上流テスト 1152/1152 合格**を確認 |
+| Mac 上での相互運用 | 7-Zip / Info-ZIP unzip / ditto / python zipfile / macOS標準tar と双方向で内容一致を確認済み |
 | **Windows 実機での相互試験** | **未検証**（ゲートD）。Windows 実機での開封・作成を保証する記述は、実機検証が完了するまで行いません |
 | 配布 | 未実施（コード署名・notarization は未実施。現在はソースからビルドして利用） |
 
@@ -60,7 +78,7 @@ CP932 モードは「日本語環境の Windows 受信者」向けの前提で�
 ## 動作環境・ビルド
 
 - macOS 14 以降、Apple silicon
-- ビルド: Xcode 27.2 ツールチェーンで `./scripts/build-app.sh`（SwiftPM リリースビルド → `/Applications/DIZUN.app` へインストール）
+- ビルド: Xcode 27.2 ツールチェーンで `./scripts/build-app.sh`（SwiftPM リリースビルド → `/Applications/DIZUN.app` へインストール。多形式エンジンの XCFramework が無い場合は `scripts/vendor/build-vendor.sh` が自動で生成します。前提として `research/` に監査済みクローン（xz v5.8.4・libarchive 固定SHA）が必要です）
 - テスト: `swift test`
 
 ## プライバシー
@@ -82,4 +100,4 @@ CP932 モードは「日本語環境の Windows 受信者」向けの前提で�
 
 Orca で統括し、Claude Code が調査・設計・実装・テスト・ローカルコミットを担当します。難所の調査・設計に限って Codex を利用します。
 
-独自コードは MIT ライセンスで公開する方針です。現在の実装は外部コードに依存しない独自エンジン（DizunCore）です。既存 OSS を利用する場合はそれぞれのライセンスと表示条件を守ります。[LICENSE](LICENSE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。
+独自コードは MIT ライセンスで公開する方針です。ZIP エンジン（DizunCore）と画像最適化（DizunImage）は外部コードに依存しません。多形式対応のために libarchive（BSD系・ファイル単位の帰属）と liblzma（0BSD）を固定リビジョンから静的リンクしています。既存 OSS を利用する場合はそれぞれのライセンスと表示条件を守ります。[LICENSE](LICENSE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。
